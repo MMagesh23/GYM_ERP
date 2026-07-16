@@ -1,4 +1,4 @@
-# Gym Management ERP — Phase 1 + Phase 2
+# Gym Management ERP — Phase 1 + 2 + 3 + 4 + 5
 
 This is the foundation layer of the Gym ERP: full folder structure, all 14 MongoDB
 collections modeled, JWT auth (access + rotating refresh tokens) with account lockout,
@@ -92,10 +92,10 @@ npm run dev                  # http://localhost:5173 (proxies /api to :5000)
 Log in with the seeded admin account, and you'll land on a dashboard shell with a
 role-aware sidebar (Admin sees Expenses/Staff/Reports/Settings; Receptionist does not).
 
-## Phase 2 additions: Members & Membership Lifecycle
+## Phase 2: Members & Membership Lifecycle
 
 **Backend**
-- `models/Counter.js` — generic atomic-increment counter, reused for Member/Staff/Equipment IDs.
+- `models/Counter.js` — generic atomic-increment counter, reused for Member/Staff/Equipment/Invoice IDs.
 - `utils/idGenerator.js` — generates `GYM001`-style member IDs off the Settings prefix.
 - `middleware/upload.js` — multer config for photo uploads and CSV/Excel import files.
 - `controllers/memberController.js` + `routes/memberRoutes.js` — full CRUD, pagination,
@@ -104,36 +104,122 @@ role-aware sidebar (Admin sees Expenses/Staff/Reports/Settings; Receptionist doe
 - `controllers/membershipPlanController.js` + `routes/membershipPlanRoutes.js` — plan CRUD;
   standard duration types auto-compute `durationDays`, custom plans accept their own.
 - `controllers/membershipController.js` + `routes/membershipRoutes.js` — the full lifecycle:
-  - **New**: creates a membership, sets the member's `currentMembership` and status.
-  - **Renew**: respects `maxRenewals` and the plan's grace period when picking the new start date.
-  - **Upgrade/Downgrade**: pro-rates remaining days onto the new plan.
-  - **Transfer**: moves an active membership to a different member record.
-  - **Freeze/Unfreeze**: extends the end date by the frozen days, enforces the plan's `freezeDays` cap.
-  - **Cancel**: ends the membership and clears the member's active link.
-  - **Expiring soon**: `/api/memberships/expiring?days=7` for reminders/dashboard use.
-  - Pricing (`calcFinalAmount`) applies discount (flat or %) then tax, unit-tested inline.
+  new / renew / upgrade / downgrade (pro-rated) / transfer / freeze / unfreeze / cancel,
+  plus `/api/memberships/expiring?days=7` for reminders. Pricing (`calcFinalAmount`)
+  applies discount (flat or %) then tax.
 
 **Frontend**
-- `pages/Members/` — list page (search, status filter, pagination, export button, admin-only
-  import), add/edit modal, and a member profile page showing membership history with
-  renew/freeze/cancel actions and an "Assign Membership" flow.
+- `pages/Members/` — list page (search, status filter, pagination, export, admin-only import),
+  add/edit modal, member profile page with membership history and lifecycle actions.
 - `pages/Memberships/PlansPage.jsx` — admin-only plan cards with create/edit/deactivate.
-- `components/common/` — Modal, ConfirmDialog, Badge, Pagination (shared across future phases).
-- Sidebar now links to **Plans** (admin only) alongside Members.
+- `components/common/` — Modal, ConfirmDialog, Badge, Pagination (shared across all phases).
 
-Both the backend (`npm install`, syntax check, boots cleanly) and frontend
-(`npm install && npm run build`) were verified in this environment. No live MongoDB
-was available here to run a full end-to-end request, so exercise the flows locally
-against your own `MONGO_URI` before going live — the pricing math and ID generation
-were verified directly.
+## Phase 3: Payments & Expenses
+
+**Backend**
+- `utils/generateInvoicePdf.js` — PDFKit-based invoice generator, streamed directly to the
+  response (verified in this environment: rendered and rasterized to confirm layout).
+- `utils/fileStorage.js` — saves uploaded bill/receipt files to `/uploads/bills` and serves
+  them statically at `/uploads/...` (swap for a Cloudinary call if you set those env vars).
+- `controllers/paymentController.js` + `routes/paymentRoutes.js` — record a payment (optionally
+  linked to a membership, auto-generating an `INV00001`-style invoice), list with filters
+  (status/method/member/date range), PDF invoice download, partial/full refunds, Excel export.
+- `controllers/expenseController.js` + `routes/expenseRoutes.js` — CRUD with an optional
+  bill/receipt upload, category + date filters, an `/analytics` endpoint (category breakdown
+  and monthly totals via MongoDB aggregation) for the dashboard charts, and Excel export.
+
+**Frontend**
+- `pages/Payments/` — list with status/method filters, "Record Payment" modal with a
+  searchable member combobox that auto-fills the amount from their active membership,
+  refund modal, one-click invoice PDF download.
+- `pages/Expenses/` — list with category filter, add/edit modal with file upload, monthly
+  bar chart + category pie chart (Recharts) fed by the analytics endpoint.
+- `services/downloadFile.js` — **fixes a bug from the initial Phase 2 pass**: export and
+  invoice endpoints require the JWT in an `Authorization` header, which a plain `<a href>`
+  link can't send (only our axios interceptor attaches it). All file downloads now go
+  through an authenticated blob fetch instead. Members export was patched to match.
+
+Backend and frontend were both installed and build-tested clean in this environment,
+including a real generated + rasterized sample PDF invoice to check the layout. No live
+MongoDB was available here, so exercise the flows once against your own `MONGO_URI`
+before relying on them in production.
+
+## Phase 4: Equipment & Staff
+
+**Backend**
+- `controllers/equipmentController.js` + `routes/equipmentRoutes.js` — CRUD with auto-generated
+  `EQP001`-style IDs, photo upload, search (name/serial/brand/ID), status filter, status
+  transitions, a `/warranty-alerts?days=30` endpoint, Excel export.
+- `controllers/maintenanceController.js` + `routes/maintenanceRoutes.js` (nested under
+  `/equipment/:id/maintenance` for history, standalone `/maintenance/:id` for updates) —
+  logging service/repair/inspection records, repair cost tracking, and a `/due?days=7`
+  endpoint for upcoming service alerts. Logging an active repair automatically flips the
+  equipment to `under_maintenance`; marking it `completed` restores `active` (or `repaired`
+  for a finished repair).
+- `controllers/staffController.js` + `routes/staffRoutes.js` (admin-only throughout) — add
+  staff with an auto-generated `EMP001`-style ID, **optionally create a linked login
+  account** (role `receptionist`) with a generated temporary password, edit profile, disable/
+  re-enable (which also flips the linked `User.isActive`), and reset password (rotates the
+  refresh token too, forcing re-login everywhere).
+
+**Frontend**
+- `pages/Equipment/` — list with search/status filter, warranty-expiry banner, add/edit
+  modal with photo upload, a detail page showing full maintenance history with a
+  "mark completed" action and a "log record" modal.
+- `pages/Staff/` — list with search, add/edit modal (with a "create login account" toggle),
+  disable/re-enable, and a one-time credentials modal shown after account creation or a
+  password reset (with copy-to-clipboard) — since generated passwords are only ever
+  returned once, never stored or re-displayed.
+- `Badge` component extended to cover equipment/staff statuses (under maintenance, damaged,
+  retired, disabled, etc).
+
+Backend and frontend both installed and build-tested clean in this environment. As with
+earlier phases, there's no live MongoDB here, so the full equipment/maintenance/staff
+flows haven't been exercised end-to-end — worth a pass against your own `MONGO_URI`.
+
+## Phase 5: Dashboard, Notifications, Reports & Audit Logs
+
+**Backend**
+- `controllers/dashboardController.js` + `routes/dashboardRoutes.js` — `/summary` (all the
+  cards: total/active/expired/new members, monthly revenue/expenses/net profit, equipment
+  count, memberships expiring in 7 days, pending payments) and `/charts` (revenue,
+  membership growth, profit, and plan-distribution series, all via MongoDB aggregation).
+- `utils/notificationGenerator.js` — six checks (membership expiry, payment due, birthday
+  wishes, equipment service due, low revenue alert vs. 30-day average, daily collection
+  summary), each idempotent per day so re-running won't duplicate. Wired into `server.js`
+  on a daily `node-cron` schedule (8 AM) and also triggerable on demand.
+- `controllers/notificationController.js` + `routes/notificationRoutes.js` — list with
+  unread count, mark-read / mark-all-read, and an admin "generate now" endpoint.
+- `controllers/reportController.js` + `routes/reportRoutes.js` — all 7 reports (Member,
+  Membership, Payment, Expense, Profit, Equipment, Staff) exportable as Excel or CSV from
+  the same workbook builder, plus a dedicated PDFKit **Profit Report** PDF — rendered and
+  rasterized in this environment to confirm the layout, alongside the earlier invoice PDF.
+- `controllers/auditLogController.js` + `routes/auditLogRoutes.js` — filterable
+  (user/action/module/date range), paginated log viewer over everything the audit trail
+  has been recording since Phase 1.
+
+**Frontend**
+- `pages/Dashboard/DashboardPage.jsx` — replaced the placeholder with real stat cards and
+  four Recharts panels (revenue line, membership growth bar, profit line, plan distribution
+  pie), all fed by the new dashboard endpoints.
+- `components/layout/NotificationBell.jsx` — a header dropdown with unread badge,
+  mark-read/mark-all-read, and an admin-only manual "generate now" refresh button, polling
+  every 60s. Added a slim top header bar to `AppLayout` to hold it.
+- `pages/Reports/ReportsPage.jsx` — one card per report with Excel/CSV buttons (PDF too,
+  for Profit).
+- `pages/AuditLogs/AuditLogsPage.jsx` — filterable, paginated log table with color-coded
+  action badges.
+
+This closes out the module list from the original spec. Backend and frontend both
+installed and build-tested clean here, and I rendered a sample Profit Report PDF with the
+real drawing code to check the layout before calling it done. No live MongoDB in this
+sandbox, so — as with every phase — run the flows once against your own `MONGO_URI` before
+relying on them; the cron job in particular is worth a manual `POST /api/notifications/generate`
+test first.
 
 ## What's next (per the phased plan)
 
-- **Phase 3:** Payments (PDF invoice generation, refunds) + Expenses.
-- **Phase 4:** Equipment + maintenance history + Staff management.
-- **Phase 5:** Dashboard cards/charts, Notifications, Reports (PDF/Excel/CSV export),
-  Audit log viewer.
-- **Phase 6:** UI polish pass, QR code check-in, deployment guide (e.g. Render/Railway
+- **Phase 6 (final):** UI polish pass, QR code check-in, deployment guide (e.g. Render/Railway
   + MongoDB Atlas + Vercel).
 
 Say the word when you want to start Phase 2.

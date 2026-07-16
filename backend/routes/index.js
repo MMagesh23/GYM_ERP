@@ -11,9 +11,10 @@ router.use('/expenses', require('./expenseRoutes'));
 router.use('/equipment', require('./equipmentRoutes'));
 router.use('/maintenance', require('./maintenanceRoutes'));
 router.use('/staff', require('./staffRoutes'));
-
-// Placeholders wired up in later phases:
-// router.use('/notifications', require('./notificationRoutes'));
+router.use('/dashboard', require('./dashboardRoutes'));
+router.use('/notifications', require('./notificationRoutes'));
+router.use('/reports', require('./reportRoutes'));
+router.use('/audit-logs', require('./auditLogRoutes'));
 // router.use('/reports', require('./reportRoutes'));
 // router.use('/audit-logs', require('./auditLogRoutes'));
 // router.use('/dashboard', require('./dashboardRoutes'));

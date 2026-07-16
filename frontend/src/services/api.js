@@ -1,16 +1,17 @@
 import axios from 'axios';
 import { getStore } from '../redux/storeRegistry';
+import { setAccessToken, logoutLocal } from '../redux/slices/authSlice';
 
 const api = axios.create({
   baseURL: '/api',
   withCredentials: true, // sends the httpOnly refreshToken cookie
 });
 
-const getAppStore = () => getStore();
+const getCurrentStore = () => getStore();
 
 // Attach the current access token to every request
 api.interceptors.request.use((config) => {
-  const store = getAppStore();
+  const store = getCurrentStore();
   const token = store.getState().auth.accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -38,7 +39,7 @@ api.interceptors.response.use(
 
     if (config.url.includes('/auth/refresh') || config.url.includes('/auth/login')) {
       // Refresh itself failed - force logout, don't loop
-      getAppStore().dispatch({ type: 'auth/logoutLocal' });
+      getCurrentStore().dispatch(logoutLocal());
       return Promise.reject(error);
     }
 
@@ -57,13 +58,13 @@ api.interceptors.response.use(
     try {
       const { data } = await api.post('/auth/refresh');
       const newToken = data.data.accessToken;
-      getAppStore().dispatch({ type: 'auth/setAccessToken', payload: newToken });
+      getCurrentStore().dispatch(setAccessToken(newToken));
       processQueue(null, newToken);
       config.headers.Authorization = `Bearer ${newToken}`;
       return api(config);
     } catch (refreshError) {
       processQueue(refreshError, null);
-      getAppStore().dispatch({ type: 'auth/logoutLocal' });
+      getCurrentStore().dispatch(logoutLocal());
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

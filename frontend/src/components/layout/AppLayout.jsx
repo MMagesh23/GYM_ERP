@@ -10,6 +10,7 @@ import {
   UserCog,
   BarChart3,
   ClipboardList,
+  ShieldCheck,
   Settings as SettingsIcon,
   Sun,
   Moon,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toggleTheme } from '../../redux/slices/uiSlice';
 import { logoutUser } from '../../redux/slices/authSlice';
+import NotificationBell from './NotificationBell';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'receptionist'] },
@@ -27,6 +29,7 @@ const NAV_ITEMS = [
   { to: '/equipment', label: 'Equipment', icon: Dumbbell, roles: ['admin', 'receptionist'] },
   { to: '/staff', label: 'Staff', icon: UserCog, roles: ['admin'] },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin'] },
+  { to: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, roles: ['admin'] },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, roles: ['admin'] },
 ];
 
@@ -88,6 +91,9 @@ const AppLayout = () => {
       </aside>
 
       <main className="flex-1 overflow-y-auto">
+        <div className="flex justify-end border-b border-gray-200 bg-white px-6 py-2.5 dark:border-gray-800 dark:bg-gray-900">
+          <NotificationBell />
+        </div>
         <Outlet />
       </main>
     </div>

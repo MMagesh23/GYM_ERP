@@ -16,6 +16,8 @@ import ExpensesPage from './pages/Expenses/ExpensesPage';
 import EquipmentPage from './pages/Equipment/EquipmentPage';
 import EquipmentDetailPage from './pages/Equipment/EquipmentDetailPage';
 import StaffPage from './pages/Staff/StaffPage';
+import ReportsPage from './pages/Reports/ReportsPage';
+import AuditLogsPage from './pages/AuditLogs/AuditLogsPage';
 import { fetchCurrentUser } from './redux/slices/authSlice';
 
 // Placeholder pages for modules built in later phases
@@ -55,7 +57,8 @@ function App() {
               <Route path="/membership-plans" element={<PlansPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/staff" element={<StaffPage />} />
-              <Route path="/reports" element={<ComingSoon title="Reports" />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/audit-logs" element={<AuditLogsPage />} />
               <Route path="/settings" element={<ComingSoon title="Settings" />} />
             </Route>
           </Route>

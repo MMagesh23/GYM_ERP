@@ -5,6 +5,7 @@ const paymentSchema = new mongoose.Schema(
     invoiceNumber: { type: String, required: true, unique: true },
     member: { type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true, index: true },
     membership: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership' },
+    invoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice' },
 
     amount: { type: Number, required: true },
     discount: { type: Number, default: 0 },

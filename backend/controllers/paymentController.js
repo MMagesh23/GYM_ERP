@@ -64,6 +64,8 @@ const createPayment = asyncHandler(async (req, res) => {
   });
 
   payment.invoice = invoice._id;
+  await payment.save();
+
   if (membership) {
     membership.invoice = invoice._id;
     await membership.save();
