@@ -1,7 +1,9 @@
 const User = require('../models/User');
+const Session = require('../models/Session');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
+const { parseDeviceLabel } = require('../utils/deviceLabel');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -16,7 +18,7 @@ const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/api/auth',
 };
 
@@ -49,7 +51,6 @@ const login = asyncHandler(async (req, res) => {
     const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
     throw new ApiError(423, `Account locked due to repeated failed logins. Try again in ${minutesLeft} minute(s).`);
   }
-
   if (!user.isActive) throw new ApiError(403, 'This account has been disabled. Contact your administrator.');
 
   const isMatch = await user.comparePassword(password);
@@ -63,26 +64,39 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid email or password.');
   }
 
-  // Successful login - reset lockout counters
   user.loginAttempts = 0;
   user.lockUntil = undefined;
   user.lastLoginAt = new Date();
   user.lastLoginIP = req.ip;
+  await user.save();
+
+  // Build the session in memory first (Mongoose assigns _id immediately,
+  // no DB round-trip needed), THEN generate the token that references it,
+  // THEN save once, fully populated. Avoids the two-phase-save validation issue.
+  const session = new Session({
+    user: user._id,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] || '',
+    deviceLabel: parseDeviceLabel(req.headers['user-agent'] || ''),
+  });
 
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-  user.refreshTokenHash = hashToken(refreshToken);
-  await user.save();
+  const refreshToken = generateRefreshToken(user, session._id.toString());
+  session.refreshTokenHash = hashToken(refreshToken);
+  await session.save();
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTS);
 
-  await logAudit(req, { action: 'login', module: 'auth', targetId: user._id, description: `${user.email} logged in` });
+  await logAudit(req, {
+    action: 'login',
+    module: 'auth',
+    targetId: user._id,
+    description: `${user.email} logged in (${session.deviceLabel})`,
+  });
 
   res.json({ success: true, data: { user, accessToken } });
 });
 
-// @desc  Exchange a valid refresh token (httpOnly cookie) for a new access token
-// @route POST /api/auth/refresh
 const refresh = asyncHandler(async (req, res) => {
   const token = req.cookies?.refreshToken;
   if (!token) throw new ApiError(401, 'No refresh token provided.');
@@ -94,26 +108,34 @@ const refresh = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Refresh token invalid or expired. Please log in again.');
   }
 
-  const user = await User.findById(decoded.sub);
+  const [user, session] = await Promise.all([
+    User.findById(decoded.sub),
+    Session.findById(decoded.sid),
+  ]);
   if (!user || !user.isActive) throw new ApiError(401, 'Account not found or disabled.');
+  if (!session || session.revoked) throw new ApiError(401, 'Session has been revoked. Please log in again.');
 
-  if (user.refreshTokenHash !== hashToken(token)) {
-    // Token reuse detected (rotation mismatch) - force logout everywhere
-    user.refreshTokenHash = null;
-    await user.save();
+  if (session.refreshTokenHash !== hashToken(token)) {
+    // Reuse of a rotated-out token = compromised session. Kill it.
+    session.revoked = true;
+    session.revokedAt = new Date();
+    session.revokedReason = 'reuse_detected';
+    await session.save();
     throw new ApiError(401, 'Refresh token has been invalidated. Please log in again.');
   }
 
-  // Rotate refresh token
-  const newRefreshToken = generateRefreshToken(user);
-  user.refreshTokenHash = hashToken(newRefreshToken);
-  await user.save();
+  const newRefreshToken = generateRefreshToken(user, session._id.toString());
+  session.refreshTokenHash = hashToken(newRefreshToken);
+  session.lastActiveAt = new Date();
+  session.ipAddress = req.ip;
+  await session.save();
 
   res.cookie('refreshToken', newRefreshToken, REFRESH_COOKIE_OPTS);
 
   const accessToken = generateAccessToken(user);
   res.json({ success: true, data: { accessToken } });
 });
+
 
 // @desc  Logout - invalidate refresh token
 // @route POST /api/auth/logout
@@ -122,9 +144,9 @@ const logout = asyncHandler(async (req, res) => {
   if (token) {
     try {
       const decoded = verifyRefreshToken(token);
-      await User.findByIdAndUpdate(decoded.sub, { refreshTokenHash: null });
+      await Session.findByIdAndUpdate(decoded.sid, { revoked: true, revokedAt: new Date(), revokedReason: 'logout' });
     } catch (err) {
-      // token already invalid/expired - nothing to clean up
+      // token already invalid - nothing to clean up
     }
   }
   res.clearCookie('refreshToken', { path: '/api/auth' });
@@ -136,10 +158,98 @@ const logout = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Logged out successfully.' });
 });
 
-// @desc  Get current authenticated user
-// @route GET /api/auth/me
 const me = asyncHandler(async (req, res) => {
   res.json({ success: true, data: req.user });
 });
 
-module.exports = { register, login, refresh, logout, me };
+// @desc  List the current user's active (non-revoked) sessions
+// @route GET /api/auth/sessions
+const listMySessions = asyncHandler(async (req, res) => {
+  const sessions = await Session.find({ user: req.user._id, revoked: false }).sort({ lastActiveAt: -1 });
+  res.json({ success: true, data: sessions });
+});
+
+// @desc  Revoke a specific session (e.g. "log out this device")
+// @route DELETE /api/auth/sessions/:id
+const revokeSession = asyncHandler(async (req, res) => {
+  const session = await Session.findOne({ _id: req.params.id, user: req.user._id });
+  if (!session) throw new ApiError(404, 'Session not found.');
+
+  session.revoked = true;
+  session.revokedAt = new Date();
+  session.revokedReason = 'manual_revoke';
+  await session.save();
+
+  await logAudit(req, { action: 'update', module: 'auth', targetId: session._id, description: `Revoked session (${session.deviceLabel})` });
+
+  res.json({ success: true, message: 'Session revoked.' });
+});
+
+// @desc  Revoke every session except the current one ("log out other devices")
+// @route POST /api/auth/sessions/revoke-others
+const revokeOtherSessions = asyncHandler(async (req, res) => {
+  const token = req.cookies?.refreshToken;
+  const decoded = token ? verifyRefreshToken(token) : null;
+  const currentSessionId = decoded?.sid;
+
+  await Session.updateMany(
+    { user: req.user._id, revoked: false, _id: { $ne: currentSessionId } },
+    { revoked: true, revokedAt: new Date(), revokedReason: 'manual_revoke' }
+  );
+
+  await logAudit(req, { action: 'update', module: 'auth', targetId: req.user._id, description: 'Revoked all other sessions' });
+
+  res.json({ success: true, message: 'All other sessions revoked.' });
+});
+
+// @desc  Admin: view active sessions for any user (useful for security investigations)
+// @route GET /api/auth/sessions/user/:userId
+const listUserSessions = asyncHandler(async (req, res) => {
+  const sessions = await Session.find({ user: req.params.userId }).sort({ lastActiveAt: -1 }).limit(50);
+  res.json({ success: true, data: sessions });
+});
+
+// @desc  Change the logged-in user's own password
+// @route PUT /api/auth/change-password
+// body: { currentPassword, newPassword }
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    throw new ApiError(400, 'Current password and new password are required.');
+  }
+  if (newPassword.length < 8) {
+    throw new ApiError(400, 'New password must be at least 8 characters.');
+  }
+
+  const user = await User.findById(req.user._id);
+  const isMatch = await user.comparePassword(currentPassword);
+  if (!isMatch) throw new ApiError(401, 'Current password is incorrect.');
+
+  await user.setPassword(newPassword);
+  await user.save();
+
+  // Revoke every other session so a leaked old password can't keep a device logged in
+  const token = req.cookies?.refreshToken;
+  let currentSessionId = null;
+  if (token) {
+    try {
+      currentSessionId = verifyRefreshToken(token).sid;
+    } catch (err) {
+      // ignore - falls through to revoking everything
+    }
+  }
+  await Session.updateMany(
+    { user: user._id, revoked: false, _id: { $ne: currentSessionId } },
+    { revoked: true, revokedAt: new Date(), revokedReason: 'password_change' }
+  );
+
+  await logAudit(req, { action: 'update', module: 'auth', targetId: user._id, description: `${user.email} changed their password` });
+
+  res.json({ success: true, message: 'Password changed successfully.' });
+});
+
+module.exports = {
+  register, login, refresh, logout, me,
+  listMySessions, revokeSession, revokeOtherSessions, listUserSessions, changePassword,
+};

@@ -8,9 +8,9 @@ const generateAccessToken = (user) =>
     { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' }
   );
 
-const generateRefreshToken = (user) =>
+const generateRefreshToken = (user, sessionId) =>
   jwt.sign(
-    { sub: user._id.toString(), tokenId: crypto.randomUUID() },
+    { sub: user._id.toString(), sid: sessionId },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d' }
   );

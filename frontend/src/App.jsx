@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 
@@ -18,27 +18,49 @@ import EquipmentDetailPage from './pages/Equipment/EquipmentDetailPage';
 import StaffPage from './pages/Staff/StaffPage';
 import ReportsPage from './pages/Reports/ReportsPage';
 import AuditLogsPage from './pages/AuditLogs/AuditLogsPage';
+import SettingsPage from './pages/Settings/SettingsPage';
 import { fetchCurrentUser } from './redux/slices/authSlice';
-
-// Placeholder pages for modules built in later phases
-const ComingSoon = ({ title }) => (
-  <div className="p-6">
-    <h1 className="text-xl font-semibold">{title}</h1>
-    <p className="mt-1 text-sm text-gray-500">This module will be built in an upcoming phase.</p>
-  </div>
-);
+import { fetchSettings } from './redux/slices/settingsSlice';
 
 function App() {
   const dispatch = useDispatch();
+  const { data: settings } = useSelector((state) => state.settings);
 
   useEffect(() => {
-    // Attempt a silent session restore on first load using the httpOnly refresh cookie
     dispatch(fetchCurrentUser());
+    dispatch(fetchSettings());
   }, [dispatch]);
+
+  // Dynamically apply favicon + document title once branding settings load
+  useEffect(() => {
+    if (!settings) return;
+
+    if (settings.favicon) {
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = settings.favicon;
+    }
+
+    if (settings.gymName) {
+      document.title = settings.gymName;
+    }
+  }, [settings]);
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          className: '!rounded-xl !shadow-popover !text-sm',
+          success: { iconTheme: { primary: '#10b981', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+        }}
+      />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -52,14 +74,13 @@ function App() {
             <Route path="/equipment" element={<EquipmentPage />} />
             <Route path="/equipment/:id" element={<EquipmentDetailPage />} />
 
-            {/* Admin-only routes */}
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/membership-plans" element={<PlansPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/staff" element={<StaffPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/audit-logs" element={<AuditLogsPage />} />
-              <Route path="/settings" element={<ComingSoon title="Settings" />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Route>
           </Route>
         </Route>

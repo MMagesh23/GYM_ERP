@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Download, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Download, Pencil, Trash2, AlertTriangle, Dumbbell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import { equipmentApi } from '../../services/equipmentApi';
@@ -8,13 +8,16 @@ import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import EquipmentFormModal from './EquipmentFormModal';
+import PageHeader from '../../components/common/PageHeader';
+import { SkeletonTable } from '../../components/common/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
 
 const STATUS_OPTIONS = ['active', 'under_maintenance', 'damaged', 'repaired', 'retired'];
 
 const EquipmentPage = () => {
   const { user } = useSelector((state) => state.auth);
   const [items, setItems] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,7 +33,7 @@ const EquipmentPage = () => {
       try {
         const { data } = await equipmentApi.list({ page, limit: 20, q: q || undefined, status: status || undefined });
         setItems(data.data);
-        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load equipment');
       } finally {
@@ -60,30 +63,35 @@ const EquipmentPage = () => {
     }
   };
 
+  const hasFilters = Boolean(q || status);
+
   return (
-    <div className="p-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Equipment</h1>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => equipmentApi.export()}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-          >
-            <Download size={16} /> Export
-          </button>
-          {user?.role === 'admin' && (
+    <div className="p-4 sm:p-6">
+      <PageHeader
+        title="Equipment"
+        subtitle={!loading ? `${pagination.total} item${pagination.total === 1 ? '' : 's'} total` : undefined}
+        actions={
+          <>
             <button
-              onClick={() => {
-                setEditingItem(null);
-                setFormOpen(true);
-              }}
-              className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              onClick={() => equipmentApi.export()}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
-              <Plus size={16} /> Add Equipment
+              <Download size={16} /> Export
             </button>
-          )}
-        </div>
-      </div>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => {
+                  setEditingItem(null);
+                  setFormOpen(true);
+                }}
+                className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
+              >
+                <Plus size={16} /> Add Equipment
+              </button>
+            )}
+          </>
+        }
+      />
 
       {alerts.length > 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
@@ -96,7 +104,7 @@ const EquipmentPage = () => {
       )}
 
       <div className="mb-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[220px]">
+        <div className="relative min-w-[220px] flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={q}
@@ -119,34 +127,44 @@ const EquipmentPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3">Equipment ID</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Location</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {loading ? (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        {loading ? (
+          <SkeletonTable rows={8} cols={5} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={Dumbbell}
+            title={hasFilters ? 'No equipment matches your filters' : 'No equipment yet'}
+            description={hasFilters ? 'Try a different search term or clear your filters.' : 'Add your first piece of equipment to get started.'}
+            action={
+              !hasFilters &&
+              user?.role === 'admin' && (
+                <button
+                  onClick={() => {
+                    setEditingItem(null);
+                    setFormOpen(true);
+                  }}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  Add Equipment
+                </button>
+              )
+            }
+          />
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
-                </td>
+                <th className="px-4 py-3">Equipment ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Location</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
-            ) : items.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  No equipment found.
-                </td>
-              </tr>
-            ) : (
-              items.map((item) => (
-                <tr key={item._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {items.map((item) => (
+                <tr key={item._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-4 py-3 font-medium">
                     <Link to={`/equipment/${item._id}`} className="text-brand-600 hover:underline">
                       {item.equipmentId}
@@ -182,11 +200,13 @@ const EquipmentPage = () => {
                     )}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchItems} />
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!loading && items.length > 0 && (
+          <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchItems} />
+        )}
       </div>
 
       <EquipmentFormModal

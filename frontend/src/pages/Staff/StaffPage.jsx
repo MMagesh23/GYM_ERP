@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Pencil, Ban, RotateCcw, KeyRound } from 'lucide-react';
+import { Plus, Search, Pencil, Ban, RotateCcw, KeyRound, UserCog } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { staffApi } from '../../services/staffApi';
 import Badge from '../../components/common/Badge';
@@ -7,10 +7,13 @@ import Pagination from '../../components/common/Pagination';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import StaffFormModal from './StaffFormModal';
 import CredentialsModal from './CredentialsModal';
+import PageHeader from '../../components/common/PageHeader';
+import { SkeletonTable } from '../../components/common/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
 
 const StaffPage = () => {
   const [staff, setStaff] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +29,7 @@ const StaffPage = () => {
       try {
         const { data } = await staffApi.list({ page, limit: 20, q: q || undefined });
         setStaff(data.data);
-        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load staff');
       } finally {
@@ -63,20 +66,25 @@ const StaffPage = () => {
     }
   };
 
+  const hasFilters = Boolean(q);
+
   return (
-    <div className="p-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Staff</h1>
-        <button
-          onClick={() => {
-            setEditingStaff(null);
-            setFormOpen(true);
-          }}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          <Plus size={16} /> Add Staff
-        </button>
-      </div>
+    <div className="p-4 sm:p-6">
+      <PageHeader
+        title="Staff"
+        subtitle={!loading ? `${pagination.total} staff member${pagination.total === 1 ? '' : 's'} total` : undefined}
+        actions={
+          <button
+            onClick={() => {
+              setEditingStaff(null);
+              setFormOpen(true);
+            }}
+            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
+          >
+            <Plus size={16} /> Add Staff
+          </button>
+        }
+      />
 
       <div className="relative mb-4 max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -88,34 +96,43 @@ const StaffPage = () => {
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3">Employee ID</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Mobile</th>
-              <th className="px-4 py-3">Designation</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {loading ? (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        {loading ? (
+          <SkeletonTable rows={6} cols={5} />
+        ) : staff.length === 0 ? (
+          <EmptyState
+            icon={UserCog}
+            title={hasFilters ? 'No staff match your search' : 'No staff yet'}
+            description={hasFilters ? 'Try a different search term.' : 'Add your first staff member to get started.'}
+            action={
+              !hasFilters && (
+                <button
+                  onClick={() => {
+                    setEditingStaff(null);
+                    setFormOpen(true);
+                  }}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  Add Staff
+                </button>
+              )
+            }
+          />
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
-                </td>
+                <th className="px-4 py-3">Employee ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Mobile</th>
+                <th className="px-4 py-3">Designation</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
-            ) : staff.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  No staff found.
-                </td>
-              </tr>
-            ) : (
-              staff.map((s) => (
-                <tr key={s._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {staff.map((s) => (
+                <tr key={s._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-4 py-3 font-medium">{s.employeeId}</td>
                   <td className="px-4 py-3">{s.name}</td>
                   <td className="px-4 py-3">{s.mobile}</td>
@@ -154,11 +171,13 @@ const StaffPage = () => {
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchStaff} />
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!loading && staff.length > 0 && (
+          <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchStaff} />
+        )}
       </div>
 
       <StaffFormModal

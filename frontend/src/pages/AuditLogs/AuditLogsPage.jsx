@@ -1,7 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { ShieldCheck } from 'lucide-react';
 import { auditLogApi } from '../../services/reportApi';
 import PaginationComp from '../../components/common/Pagination';
+import PageHeader from '../../components/common/PageHeader';
+import { SkeletonTable } from '../../components/common/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
 
 const ACTIONS = ['login', 'logout', 'create', 'update', 'delete', 'payment', 'renewal', 'expense'];
 const MODULES = ['members', 'memberships', 'payments', 'expenses', 'equipment', 'staff', 'settings', 'notifications', 'auth'];
@@ -19,7 +23,7 @@ const ACTION_COLORS = {
 
 const AuditLogsPage = () => {
   const [logs, setLogs] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [action, setAction] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,7 +34,7 @@ const AuditLogsPage = () => {
       try {
         const { data } = await auditLogApi.list({ page, limit: 30, action: action || undefined, module: moduleFilter || undefined });
         setLogs(data.data);
-        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+        setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load audit logs');
       } finally {
@@ -44,10 +48,11 @@ const AuditLogsPage = () => {
     fetchLogs(1);
   }, [fetchLogs]);
 
+  const hasFilters = Boolean(action || moduleFilter);
+
   return (
-    <div className="p-6">
-      <h1 className="mb-1 text-xl font-semibold">Audit Logs</h1>
-      <p className="mb-6 text-sm text-gray-500">A record of who did what, and when.</p>
+    <div className="p-4 sm:p-6">
+      <PageHeader title="Audit Logs" subtitle="A record of who did what, and when." />
 
       <div className="mb-4 flex flex-wrap gap-3">
         <select
@@ -76,34 +81,30 @@ const AuditLogsPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Action</th>
-              <th className="px-4 py-3">Module</th>
-              <th className="px-4 py-3">Description</th>
-              <th className="px-4 py-3">IP Address</th>
-              <th className="px-4 py-3">Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {loading ? (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        {loading ? (
+          <SkeletonTable rows={10} cols={6} />
+        ) : logs.length === 0 ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title={hasFilters ? 'No log entries match your filters' : 'No audit log entries yet'}
+            description={hasFilters ? 'Try a different action or module filter.' : 'Activity across the app will show up here.'}
+          />
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
-                </td>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3">Module</th>
+                <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3">IP Address</th>
+                <th className="px-4 py-3">Date</th>
               </tr>
-            ) : logs.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  No audit log entries found.
-                </td>
-              </tr>
-            ) : (
-              logs.map((log) => (
-                <tr key={log._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {logs.map((log) => (
+                <tr key={log._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-4 py-3">{log.user ? `${log.user.name} (${log.user.role})` : 'System'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${ACTION_COLORS[log.action] || ''}`}>
@@ -115,11 +116,13 @@ const AuditLogsPage = () => {
                   <td className="px-4 py-3 text-gray-400">{log.ipAddress || '—'}</td>
                   <td className="px-4 py-3 text-gray-400">{new Date(log.createdAt).toLocaleString()}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <PaginationComp page={pagination.page} totalPages={pagination.totalPages} onChange={fetchLogs} />
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!loading && logs.length > 0 && (
+          <PaginationComp page={pagination.page} totalPages={pagination.totalPages} onChange={fetchLogs} />
+        )}
       </div>
     </div>
   );

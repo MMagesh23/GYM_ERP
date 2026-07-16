@@ -2,24 +2,52 @@ const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema(
   {
-    // Gym Information
+    // Identity / Branding
     gymName: { type: String, default: 'My Gym' },
-    gymLogo: { type: String, default: '' },
+    tagline: { type: String, default: '' },
+    gymLogo: { type: String, default: '' },        // returned as /uploads/branding/xxx.png
+    favicon: { type: String, default: '' },
+    brandColor: { type: String, default: '#3390fa' }, // drives --brand-500 at runtime
+    accentColor: { type: String, default: '#10b981' },
+
     address: { type: String, default: '' },
     contactNumber: { type: String, default: '' },
     email: { type: String, default: '' },
     website: { type: String, default: '' },
     gstNumber: { type: String, default: '' },
+    panNumber: { type: String, default: '' },
+
     currencySymbol: { type: String, default: '₹' },
+    currencyCode: { type: String, default: 'INR' },
     timeZone: { type: String, default: 'Asia/Kolkata' },
     dateFormat: { type: String, default: 'DD/MM/YYYY' },
+    weekStartsOn: { type: Number, default: 1 }, // 0=Sun
+
+    businessHours: [
+      {
+        day: { type: String, enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+        open: String,   // "06:00"
+        close: String,  // "22:00"
+        closed: { type: Boolean, default: false },
+      },
+    ],
+
+    // Invoice / receipt customization
+    invoicePrefix: { type: String, default: 'INV' },
+    invoiceNumberPadding: { type: Number, default: 5 },
+    invoiceTerms: { type: String, default: '' },
     receiptFooterMessage: { type: String, default: 'Thank you for choosing us!' },
+    invoiceAccentColor: { type: String, default: '#3390fa' },
 
-    // System Configuration
+    // System / ERP configuration
     memberIdPrefix: { type: String, default: 'GYM' },
-    financialYearStartMonth: { type: Number, default: 4 }, // April
+    financialYearStartMonth: { type: Number, default: 4 },
     taxPercentage: { type: Number, default: 0 },
+    defaultGracePeriodDays: { type: Number, default: 3 },
+    lowStockThresholdDays: { type: Number, default: 7 }, // equipment warranty/service alert window
+    sessionIdleTimeoutMinutes: { type: Number, default: 0 }, // 0 = disabled
 
+    // Feature toggles
     features: {
       qrCode: { type: Boolean, default: true },
       barcode: { type: Boolean, default: false },
@@ -30,15 +58,22 @@ const settingsSchema = new mongoose.Schema(
       equipmentModule: { type: Boolean, default: true },
       financeModule: { type: Boolean, default: true },
       reportsModule: { type: Boolean, default: true },
+      multiCurrency: { type: Boolean, default: false },
+      requireMfaForAdmin: { type: Boolean, default: false },
     },
 
-    // Auto-incrementing counter for Member IDs, e.g. GYM001
+    // Social / online presence (optional but common ask for "customizable")
+    socialLinks: {
+      instagram: { type: String, default: '' },
+      facebook: { type: String, default: '' },
+      youtube: { type: String, default: '' },
+    },
+
     lastMemberSequence: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
-// Enforce a single settings document (singleton pattern)
 settingsSchema.statics.getSingleton = async function () {
   let settings = await this.findOne();
   if (!settings) settings = await this.create({});

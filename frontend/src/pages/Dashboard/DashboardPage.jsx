@@ -18,6 +18,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { dashboardApi } from '../../services/dashboardApi';
+import { SkeletonCard  } from '../../components/common/Skeleton';
 
 const CHART_COLORS = ['#3390fa', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -67,7 +68,9 @@ const DashboardPage = () => {
       </p>
 
       {!summary ? (
-        <p className="text-sm text-gray-400">Loading dashboard...</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">

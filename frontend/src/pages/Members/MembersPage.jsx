@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Download, Upload, Pencil, Trash2, Snowflake, Ban, RotateCcw } from 'lucide-react';
+import { Plus, Search, Download, Upload, Pencil, Trash2, Snowflake, Ban, RotateCcw, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import { memberApi } from '../../services/memberApi';
@@ -8,13 +8,16 @@ import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import MemberFormModal from './MemberFormModal';
+import PageHeader from '../../components/common/PageHeader';
+import { SkeletonTable } from '../../components/common/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
 
 const STATUS_OPTIONS = ['active', 'expired', 'suspended', 'freeze', 'cancelled'];
 
 const MembersPage = () => {
   const { user } = useSelector((state) => state.auth);
   const [members, setMembers] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,7 +32,7 @@ const MembersPage = () => {
     try {
       const { data } = await memberApi.list({ page, limit: 20, q: q || undefined, status: status || undefined });
       setMembers(data.data);
-      setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+      setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load members');
     } finally {
@@ -38,7 +41,7 @@ const MembersPage = () => {
   }, [q, status]);
 
   useEffect(() => {
-    const timeout = setTimeout(() => fetchMembers(1), 300); // debounce search
+    const timeout = setTimeout(() => fetchMembers(1), 300);
     return () => clearTimeout(timeout);
   }, [fetchMembers]);
 
@@ -79,37 +82,42 @@ const MembersPage = () => {
     }
   };
 
+  const hasFilters = Boolean(q || status);
+
   return (
-    <div className="p-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Members</h1>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => memberApi.export({ q: q || undefined, status: status || undefined })}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-          >
-            <Download size={16} /> Export
-          </button>
-          {user?.role === 'admin' && (
-            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
-              <Upload size={16} /> {importing ? 'Importing...' : 'Import'}
-              <input type="file" accept=".csv,.xlsx" className="hidden" onChange={handleImport} disabled={importing} />
-            </label>
-          )}
-          <button
-            onClick={() => {
-              setEditingMember(null);
-              setFormOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            <Plus size={16} /> Add Member
-          </button>
-        </div>
-      </div>
+    <div className="p-4 sm:p-6">
+      <PageHeader
+        title="Members"
+        subtitle={!loading ? `${pagination.total} member${pagination.total === 1 ? '' : 's'} total` : undefined}
+        actions={
+          <>
+            <button
+              onClick={() => memberApi.export({ q: q || undefined, status: status || undefined })}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            >
+              <Download size={16} /> Export
+            </button>
+            {user?.role === 'admin' && (
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+                <Upload size={16} /> {importing ? 'Importing...' : 'Import'}
+                <input type="file" accept=".csv,.xlsx" className="hidden" onChange={handleImport} disabled={importing} />
+              </label>
+            )}
+            <button
+              onClick={() => {
+                setEditingMember(null);
+                setFormOpen(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
+            >
+              <Plus size={16} /> Add Member
+            </button>
+          </>
+        }
+      />
 
       <div className="mb-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[220px]">
+        <div className="relative min-w-[220px] flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={q}
@@ -132,34 +140,43 @@ const MembersPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3">Member ID</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {loading ? (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        {loading ? (
+          <SkeletonTable rows={8} cols={5} />
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title={hasFilters ? 'No members match your filters' : 'No members yet'}
+            description={hasFilters ? 'Try a different search term or clear your filters.' : 'Add your first member to get started.'}
+            action={
+              !hasFilters && (
+                <button
+                  onClick={() => {
+                    setEditingMember(null);
+                    setFormOpen(true);
+                  }}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  Add Member
+                </button>
+              )
+            }
+          />
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
-                </td>
+                <th className="px-4 py-3">Member ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Plan</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
-            ) : members.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  No members found. Try adjusting your search or filters.
-                </td>
-              </tr>
-            ) : (
-              members.map((m) => (
-                <tr key={m._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {members.map((m) => (
+                <tr key={m._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-4 py-3 font-medium">
                     <Link to={`/members/${m._id}`} className="text-brand-600 hover:underline">
                       {m.memberId}
@@ -223,11 +240,13 @@ const MembersPage = () => {
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchMembers} />
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!loading && members.length > 0 && (
+          <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchMembers} />
+        )}
       </div>
 
       <MemberFormModal

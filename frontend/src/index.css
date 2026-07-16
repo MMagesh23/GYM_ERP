@@ -2,18 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body,
-#root {
-  height: 100%;
+html, body, #root { height: 100%; }
+body { @apply text-gray-900 dark:text-gray-100 antialiased; }
+
+* { transition-property: background-color, border-color, color, box-shadow, transform, opacity; transition-duration: 150ms; }
+
+/* Thin, unobtrusive scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-700 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-600; }
+
+/* Consistent focus ring app-wide, keyboard-only */
+:focus-visible { outline: 2px solid #3390fa; outline-offset: 2px; }
+
+/* Skeleton loading shimmer — plain CSS, not @apply, to avoid layer-order issues */
+.skeleton {
+  border-radius: 0.375rem;
+  background-image: linear-gradient(
+    90deg,
+    #e5e7eb 0px,
+    #f3f4f6 40px,
+    #e5e7eb 80px
+  );
+  background-size: 400px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
-body {
-  @apply text-gray-900 dark:text-gray-100 antialiased;
+.dark .skeleton {
+  background-image: linear-gradient(
+    90deg,
+    #1f2937 0px,
+    #374151 40px,
+    #1f2937 80px
+  );
+  background-size: 400px 100%;
 }
 
-/* Smooth theme transitions */
-* {
-  transition-property: background-color, border-color, color;
-  transition-duration: 150ms;
+@keyframes skeleton-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
 }

@@ -6,17 +6,28 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#eef7ff',
-          100: '#d9edff',
-          200: '#bce0ff',
-          300: '#8ecdff',
-          400: '#59b0ff',
-          500: '#3390fa',
-          600: '#1d71ef',
-          700: '#175bdc',
-          800: '#1949b2',
-          900: '#1a418c',
+          50: '#eef7ff', 100: '#d9edff', 200: '#bce0ff', 300: '#8ecdff',
+          400: '#59b0ff', 500: '#3390fa', 600: '#1d71ef', 700: '#175bdc',
+          800: '#1949b2', 900: '#1a418c',
         },
+      },
+      fontFamily: {
+        sans: ['"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        card: '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06)',
+        'card-hover': '0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06)',
+        popover: '0 8px 24px -4px rgb(0 0 0 / 0.12), 0 4px 8px -4px rgb(0 0 0 / 0.08)',
+      },
+      animation: {
+        'fade-in': 'fadeIn 150ms ease-out',
+        'scale-in': 'scaleIn 150ms ease-out',
+        'slide-in-right': 'slideInRight 200ms ease-out',
+      },
+      keyframes: {
+        fadeIn: { '0%': { opacity: 0 }, '100%': { opacity: 1 } },
+        scaleIn: { '0%': { opacity: 0, transform: 'scale(0.96)' }, '100%': { opacity: 1, transform: 'scale(1)' } },
+        slideInRight: { '0%': { opacity: 0, transform: 'translateX(12px)' }, '100%': { opacity: 1, transform: 'translateX(0)' } },
       },
     },
   },
