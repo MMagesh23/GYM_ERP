@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # Gym Management ERP — Phase 1 + 2 + 3 + 4 + 5
+=======
+# Gym Management ERP — Phase 1 + 2 + 3 + 4
+>>>>>>> 0f9f8781d2d0c3c1b2a236ea231df898390e7ea2
 
 This is the foundation layer of the Gym ERP: full folder structure, all 14 MongoDB
 collections modeled, JWT auth (access + rotating refresh tokens) with account lockout,
@@ -176,6 +180,7 @@ before relying on them in production.
 Backend and frontend both installed and build-tested clean in this environment. As with
 earlier phases, there's no live MongoDB here, so the full equipment/maintenance/staff
 flows haven't been exercised end-to-end — worth a pass against your own `MONGO_URI`.
+<<<<<<< HEAD
 
 ## Phase 5: Dashboard, Notifications, Reports & Audit Logs
 
@@ -220,6 +225,13 @@ test first.
 ## What's next (per the phased plan)
 
 - **Phase 6 (final):** UI polish pass, QR code check-in, deployment guide (e.g. Render/Railway
+=======
+
+## What's next (per the phased plan)
+
+- **Phase 5:** Dashboard cards/charts, Notifications, Reports (PDF/Excel/CSV export), Audit log viewer.
+- **Phase 6:** UI polish pass, QR code check-in, deployment guide (e.g. Render/Railway
+>>>>>>> 0f9f8781d2d0c3c1b2a236ea231df898390e7ea2
   + MongoDB Atlas + Vercel).
 
 Say the word when you want to start Phase 2.
