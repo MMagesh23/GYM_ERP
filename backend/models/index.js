@@ -1,0 +1,17 @@
+module.exports = {
+  User: require('./User'),
+  Role: require('./Role'),
+  Settings: require('./Settings'),
+  Counter: require('./Counter'),
+  Member: require('./Member'),
+  MembershipPlan: require('./MembershipPlan'),
+  Membership: require('./Membership'),
+  Payment: require('./Payment'),
+  Invoice: require('./Invoice'),
+  Expense: require('./Expense'),
+  Equipment: require('./Equipment'),
+  Maintenance: require('./Maintenance'),
+  Staff: require('./Staff'),
+  Notification: require('./Notification'),
+  AuditLog: require('./AuditLog'),
+};

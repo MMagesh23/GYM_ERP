@@ -1,0 +1,165 @@
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
+import Modal from '../../components/common/Modal';
+import { planApi } from '../../services/membershipApi';
+
+const DURATION_OPTIONS = [
+  ['daily', 'Daily'],
+  ['weekly', 'Weekly'],
+  ['monthly', 'Monthly'],
+  ['quarterly', 'Quarterly'],
+  ['half_yearly', 'Half-Yearly'],
+  ['annual', 'Annual'],
+  ['lifetime', 'Lifetime'],
+  ['custom', 'Custom'],
+];
+
+const PlanFormModal = ({ open, onClose, onSaved, plan }) => {
+  const isEdit = Boolean(plan);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm();
+
+  useEffect(() => {
+    if (open) reset(plan || { discountType: 'flat', durationType: 'monthly' });
+  }, [open, plan, reset]);
+
+  const durationType = watch('durationType');
+
+  const onSubmit = async (data) => {
+    try {
+      const payload = {
+        ...data,
+        price: Number(data.price),
+        discount: Number(data.discount || 0),
+        tax: Number(data.tax || 0),
+        joiningFee: Number(data.joiningFee || 0),
+        freezeDays: Number(data.freezeDays || 0),
+        maxRenewals: Number(data.maxRenewals || 0),
+        gracePeriodDays: Number(data.gracePeriodDays || 3),
+        durationDays: data.durationDays ? Number(data.durationDays) : undefined,
+        freezeAllowed: Boolean(data.freezeAllowed),
+      };
+      if (isEdit) {
+        await planApi.update(plan._id, payload);
+        toast.success('Plan updated');
+      } else {
+        await planApi.create(payload);
+        toast.success('Plan created');
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Something went wrong');
+    }
+  };
+
+  const inputClass =
+    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800';
+  const labelClass = 'mb-1 block text-sm font-medium';
+
+  return (
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Plan' : 'New Plan'} size="lg">
+      <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Plan Name *</label>
+          <input className={inputClass} {...register('name', { required: 'Plan name is required' })} />
+          {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+        </div>
+
+        <div>
+          <label className={labelClass}>Duration Type *</label>
+          <select className={inputClass} {...register('durationType', { required: true })}>
+            {DURATION_OPTIONS.map(([val, label]) => (
+              <option key={val} value={val}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {durationType === 'custom' && (
+          <div>
+            <label className={labelClass}>Duration (days) *</label>
+            <input type="number" className={inputClass} {...register('durationDays', { required: durationType === 'custom' })} />
+          </div>
+        )}
+
+        <div>
+          <label className={labelClass}>Price (₹) *</label>
+          <input type="number" step="0.01" className={inputClass} {...register('price', { required: 'Price is required' })} />
+          {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price.message}</p>}
+        </div>
+        <div>
+          <label className={labelClass}>Joining Fee (₹)</label>
+          <input type="number" step="0.01" className={inputClass} {...register('joiningFee')} />
+        </div>
+
+        <div>
+          <label className={labelClass}>Discount</label>
+          <input type="number" step="0.01" className={inputClass} {...register('discount')} />
+        </div>
+        <div>
+          <label className={labelClass}>Discount Type</label>
+          <select className={inputClass} {...register('discountType')}>
+            <option value="flat">Flat (₹)</option>
+            <option value="percentage">Percentage (%)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass}>Tax (%)</label>
+          <input type="number" step="0.01" className={inputClass} {...register('tax')} />
+        </div>
+        <div>
+          <label className={labelClass}>Grace Period (days)</label>
+          <input type="number" className={inputClass} {...register('gracePeriodDays')} />
+        </div>
+
+        <div>
+          <label className={labelClass}>Max Renewals (0 = unlimited)</label>
+          <input type="number" className={inputClass} {...register('maxRenewals')} />
+        </div>
+        <div className="flex items-center gap-2 pt-6">
+          <input type="checkbox" id="freezeAllowed" className="h-4 w-4" {...register('freezeAllowed')} />
+          <label htmlFor="freezeAllowed" className="text-sm font-medium">
+            Allow freezing
+          </label>
+        </div>
+
+        <div>
+          <label className={labelClass}>Freeze Days Allowed</label>
+          <input type="number" className={inputClass} {...register('freezeDays')} />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Description</label>
+          <textarea rows={2} className={inputClass} {...register('description')} />
+        </div>
+
+        <div className="sm:col-span-2 mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          >
+            {isSubmitting ? 'Saving...' : isEdit ? 'Save changes' : 'Create plan'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+export default PlanFormModal;
