@@ -1,17 +1,17 @@
 const ApiError = require('../utils/ApiError');
 
-// Usage: router.post('/members', protect, authorize('admin'), createMember)
-// Admin always passes; list any additional roles allowed besides admin.
 const authorize = (...allowedRoles) => (req, res, next) => {
   if (!req.user) return next(new ApiError(401, 'Not authenticated.'));
-  if (req.user.role === 'admin') return next(); // admin has full access
+  if (req.user.role === 'admin') return next();
   if (allowedRoles.includes(req.user.role)) return next();
   return next(new ApiError(403, 'You do not have permission to perform this action.'));
 };
 
-// Usage: router.delete('/members/:id', protect, can('members', 'delete'), deleteMember)
-// Checks the granular permission matrix on req.user.roleRef (populated Role doc), if present.
-// Falls back to the simple admin/receptionist role check when no custom Role is attached.
+// Modules a plain receptionist (no custom Role assigned) could already reach via
+// unrestricted routes before this — kept as the safe default so converting
+// authorize('admin')-only routes to can() below never *loosens* access.
+const OPEN_BY_DEFAULT_MODULES = ['dashboard', 'members', 'memberships', 'payments', 'equipment', 'notifications'];
+
 const can = (moduleName, action) => async (req, res, next) => {
   if (!req.user) return next(new ApiError(401, 'Not authenticated.'));
   if (req.user.role === 'admin') return next();
@@ -20,8 +20,7 @@ const can = (moduleName, action) => async (req, res, next) => {
   const roleDoc = req.user.roleRef;
 
   if (!roleDoc) {
-    // Receptionists without a custom role get read-only access by default
-    if (action === 'view') return next();
+    if (action === 'view' && OPEN_BY_DEFAULT_MODULES.includes(moduleName)) return next();
     return next(new ApiError(403, `You do not have permission to ${action} ${moduleName}.`));
   }
 

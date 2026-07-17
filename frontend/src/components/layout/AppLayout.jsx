@@ -15,10 +15,10 @@ const NAV_ITEMS = [
   { to: '/members', label: 'Members', icon: Users, roles: ['admin', 'receptionist'] },
   { to: '/membership-plans', label: 'Plans', icon: ClipboardList, roles: ['admin'] },
   { to: '/payments', label: 'Payments', icon: CreditCard, roles: ['admin', 'receptionist'] },
-  { to: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin'] },
-  { to: '/equipment', label: 'Equipment', icon: Dumbbell, roles: ['admin', 'receptionist'] },
+  { to: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin'], feature: 'financeModule' },
+  { to: '/equipment', label: 'Equipment', icon: Dumbbell, roles: ['admin', 'receptionist'], feature: 'equipmentModule' },
   { to: '/staff', label: 'Staff', icon: UserCog, roles: ['admin'] },
-  { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin'] },
+  { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin'], feature: 'reportsModule' },
   { to: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, roles: ['admin'] },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, roles: ['admin'] },
 ];
@@ -47,7 +47,9 @@ const AppLayout = () => {
     navigate('/login', { replace: true });
   };
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(user?.role));
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => item.roles.includes(user?.role) && (!item.feature || settings?.features?.[item.feature] !== false)
+  );
   const currentPage = visibleItems.find((i) => location.pathname.startsWith(i.to));
 
   const gymName = settings?.gymName || 'Gym ERP';

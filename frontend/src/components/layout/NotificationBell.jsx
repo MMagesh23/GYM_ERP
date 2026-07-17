@@ -23,8 +23,33 @@ const NotificationBell = () => {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 60000); // refresh every minute
-    return () => clearInterval(interval);
+
+    let interval;
+    const startPolling = () => {
+      if (interval) return;
+      interval = setInterval(load, 60000);
+    };
+    const stopPolling = () => {
+      clearInterval(interval);
+      interval = undefined;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        load(); // catch up immediately on refocus
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    if (document.visibilityState === 'visible') startPolling();
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   useEffect(() => {

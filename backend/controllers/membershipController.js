@@ -4,23 +4,13 @@ const Member = require('../models/Member');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// Computes the final payable amount for a plan, applying discount + tax rules.
-// isNew controls whether the one-time joining fee is included.
-const calcFinalAmount = (plan, { isNew = false, extraDiscount = 0 } = {}) => {
-  let amount = plan.price;
-  if (isNew) amount += plan.joiningFee || 0;
-
-  const discount = plan.discountType === 'percentage' ? (amount * (plan.discount || 0)) / 100 : plan.discount || 0;
-  amount -= discount + extraDiscount;
-
-  const taxAmount = (amount * (plan.tax || 0)) / 100;
-  amount += taxAmount;
-
-  return Math.max(Math.round(amount * 100) / 100, 0);
-};
+const {
+  DAY_MS,
+  calcFinalAmount,
+  calcRenewalWindow,
+  calcProratedChangeWindow,
+  calcFreezeExtension,
+} = require('../utils/billing');
 
 // @desc  Start a brand-new membership for a member
 // @route POST /api/memberships
@@ -71,10 +61,9 @@ const renewMembership = asyncHandler(async (req, res) => {
     throw new ApiError(400, `This plan allows a maximum of ${plan.maxRenewals} renewal(s).`);
   }
 
-  // Renewal starts the day after the current membership ends (or today if already expired past grace period)
-  const graceCutoff = new Date(current.endDate.getTime() + plan.gracePeriodDays * DAY_MS);
-  const start = Date.now() > graceCutoff.getTime() ? new Date() : new Date(current.endDate.getTime() + DAY_MS);
-  const end = new Date(start.getTime() + plan.durationDays * DAY_MS);
+  // Renewal starts the day after the current membership ends (or today if already
+  // past the plan's grace period) — see utils/billing.js for the exact rule + tests.
+  const { start, end } = calcRenewalWindow(current, plan);
 
   const renewal = await Membership.create({
     member: current.member,
@@ -120,11 +109,10 @@ const changePlan = asyncHandler(async (req, res) => {
   const newPlan = await MembershipPlan.findById(newPlanId);
   if (!newPlan || !newPlan.isActive) throw new ApiError(404, 'Target plan not found or inactive.');
 
-  // Pro-rate the switch: remaining days on the old plan become remaining days on the new plan's daily rate
+  // Pro-rate the switch: remaining whole days on the old plan carry over as-is to the
+  // new plan (see utils/billing.js#calcProratedChangeWindow).
   const now = new Date();
-  const remainingMs = Math.max(current.endDate.getTime() - now.getTime(), 0);
-  const remainingDays = Math.ceil(remainingMs / DAY_MS);
-  const newEnd = new Date(now.getTime() + remainingDays * DAY_MS);
+  const { end: newEnd } = calcProratedChangeWindow(current, now);
 
   const changed = await Membership.create({
     member: current.member,
@@ -210,16 +198,16 @@ const freezeMembership = asyncHandler(async (req, res) => {
   if (membership.status !== 'active') throw new ApiError(400, 'Only an active membership can be frozen.');
   if (!membership.plan.freezeAllowed) throw new ApiError(400, 'This plan does not allow freezing.');
 
-  const usedFreezeDays = membership.freezeHistory.reduce((sum, f) => sum + (f.daysUsed || 0), 0);
-  if (usedFreezeDays + Number(days) > membership.plan.freezeDays) {
-    throw new ApiError(400, `Freeze days exceeded. Plan allows ${membership.plan.freezeDays} total, ${usedFreezeDays} already used.`);
-  }
+  // Validates the requested freeze against the plan's freeze-day allowance and computes
+  // the new end date — see utils/billing.js#calcFreezeExtension.
+  const result = calcFreezeExtension(membership, membership.plan, Number(days));
+  if (!result.valid) throw new ApiError(400, result.message);
 
   const from = new Date();
-  const to = new Date(from.getTime() + Number(days) * DAY_MS);
+  const to = result.newEndDate;
 
   membership.status = 'frozen';
-  membership.endDate = new Date(membership.endDate.getTime() + Number(days) * DAY_MS);
+  membership.endDate = result.newEndDate;
   membership.freezeHistory.push({ from, to, reason: reason || '', daysUsed: Number(days) });
   await membership.save();
 
@@ -314,5 +302,5 @@ module.exports = {
   cancelMembership,
   expiringSoon,
   historyForMember,
-  calcFinalAmount,
+  calcFinalAmount, // re-exported from utils/billing for backward compatibility with any existing imports
 };

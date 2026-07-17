@@ -189,14 +189,34 @@ const exportMembers = asyncHandler(async (req, res) => {
 const importMembers = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'No file uploaded.');
 
+  const filename = req.file.originalname || '';
+  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+
+  // Decide format by file extension, not mimetype — browsers and Excel are
+  // inconsistent about the mimetype they send for .csv (e.g. Windows often sends
+  // 'application/vnd.ms-excel' for CSV), which previously caused CSV files to be
+  // fed into the xlsx zip parser and crash with a cryptic "central directory" error.
+  const isCsv = ext === '.csv';
+
   const workbook = new ExcelJS.Workbook();
-  if (req.file.mimetype === 'text/csv') {
-    await workbook.csv.read(require('stream').Readable.from(req.file.buffer));
-  } else {
-    await workbook.xlsx.load(req.file.buffer);
+  try {
+    if (isCsv) {
+      await workbook.csv.read(require('stream').Readable.from(req.file.buffer));
+    } else {
+      await workbook.xlsx.load(req.file.buffer);
+    }
+  } catch (err) {
+    throw new ApiError(
+      400,
+      'Could not read this file. Make sure it is a valid, uncorrupted .xlsx or .csv file (legacy .xls is not supported — re-save as .xlsx or .csv).'
+    );
   }
 
   const sheet = workbook.worksheets[0];
+  if (!sheet || sheet.rowCount < 2) {
+    throw new ApiError(400, 'The file appears to be empty or missing a header row.');
+  }
+
   const results = { created: 0, failed: [] };
 
   // Expect header row: firstName, lastName, gender, phone, email, joiningDate

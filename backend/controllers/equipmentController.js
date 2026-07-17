@@ -16,7 +16,7 @@ const listEquipment = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const { status, category, q } = req.query;
 
-  const filter = {};
+  const filter = { isDeleted: false };
   if (status) filter.status = status;
   if (category) filter.category = category;
   if (q) {
@@ -29,10 +29,7 @@ const listEquipment = asyncHandler(async (req, res) => {
   }
 
   const [equipment, total] = await Promise.all([
-    Equipment.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit),
+    Equipment.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Equipment.countDocuments(filter),
   ]);
 
@@ -40,11 +37,13 @@ const listEquipment = asyncHandler(async (req, res) => {
 });
 
 const getEquipment = asyncHandler(async (req, res) => {
-  const item = await Equipment.findById(req.params.id);
+  const item = await Equipment.findOne({ _id: req.params.id, isDeleted: false });
   if (!item) throw new ApiError(404, 'Equipment not found.');
   const maintenanceHistory = await Maintenance.find({ equipment: item._id }).sort({ serviceDate: -1 });
   res.json({ success: true, data: { ...item.toObject(), maintenanceHistory } });
 });
+
+
 
 // @desc  Create equipment (auto-generates equipmentId), optional photo upload
 // @route POST /api/equipment
@@ -76,14 +75,15 @@ const updateEquipment = asyncHandler(async (req, res) => {
   res.json({ success: true, data: item });
 });
 
-// @desc  Delete equipment
+// @desc  Soft-delete equipment (maintenance history is preserved for reporting)
 // @route DELETE /api/equipment/:id
 const deleteEquipment = asyncHandler(async (req, res) => {
-  const item = await Equipment.findById(req.params.id);
+  const item = await Equipment.findOne({ _id: req.params.id, isDeleted: false });
   if (!item) throw new ApiError(404, 'Equipment not found.');
 
-  await item.deleteOne();
-  await Maintenance.deleteMany({ equipment: item._id });
+  item.isDeleted = true;
+  item.status = 'retired';
+  await item.save();
 
   await logAudit(req, { action: 'delete', module: 'equipment', targetId: item._id, description: `Deleted equipment ${item.equipmentId}` });
 

@@ -37,7 +37,7 @@ const generateMembershipExpiryReminders = async (daysAhead = 3) => {
       recipientMember: m.member._id,
       title: 'Membership expiring soon',
       message: `${m.member.firstName}'s ${m.plan?.name || 'membership'} expires on ${m.endDate.toDateString()}.`,
-      channels: { system: true, email: true, sms: false, whatsapp: false },
+      channels: { system: true, email: false, sms: false, whatsapp: false },
     });
     created += 1;
   }
@@ -56,7 +56,7 @@ const generatePaymentDueReminders = async () => {
       recipientMember: p.member._id,
       title: 'Payment due',
       message: `${p.member.firstName} has a pending payment of ${p.finalAmount} (Invoice ${p.invoiceNumber}).`,
-      channels: { system: true, email: true, sms: false, whatsapp: false },
+      channels: { system: true, email: false, sms: false, whatsapp: false },
     });
     created += 1;
   }
@@ -79,7 +79,7 @@ const generateBirthdayWishes = async () => {
       recipientMember: m._id,
       title: 'Happy Birthday!',
       message: `Wish ${m.firstName} a happy birthday today!`,
-      channels: { system: true, email: false, sms: false, whatsapp: true },
+      channels: { system: true, email: false, sms: false, whatsapp: false },
     });
     created += 1;
   }
@@ -138,7 +138,7 @@ const generateLowRevenueAlert = async () => {
         type: 'low_revenue_alert',
         title: 'Low revenue alert',
         message: `Today's collection (${todayTotal.toFixed(2)}) is well below the recent daily average (${avgDaily.toFixed(2)}).`,
-        channels: { system: true, email: true, sms: false, whatsapp: false },
+        channels: { system: true, email: false, sms: false, whatsapp: false },
       });
       return 1;
     }

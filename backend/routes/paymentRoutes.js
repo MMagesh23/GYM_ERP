@@ -3,6 +3,8 @@ const { body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
+const { can } = require('../middleware/rbac');
+
 const {
   createPayment,
   listPayments,
@@ -31,6 +33,6 @@ router.post(
 );
 router.get('/:id', protect, getPayment);
 router.get('/:id/invoice', protect, downloadInvoice);
-router.post('/:id/refund', protect, authorize('admin'), refundPayment);
+router.post('/:id/refund', protect, can('payments', 'update'), refundPayment);
 
 module.exports = router;

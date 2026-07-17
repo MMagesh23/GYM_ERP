@@ -1,0 +1,168 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Gym ERP API",
+    "version": "1.0.0",
+    "description": "REST API for the Gym Management ERP. This spec covers the core modules as a starting scaffold — extend per-route as new endpoints stabilize."
+  },
+  "servers": [{ "url": "/api" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "Member": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "memberId": { "type": "string", "example": "GYM007" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "gender": { "type": "string", "enum": ["male", "female", "other"] },
+          "phone": { "type": "string" },
+          "email": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "expired", "suspended", "freeze", "cancelled"] },
+          "joiningDate": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "invoiceNumber": { "type": "string" },
+          "member": { "type": "string" },
+          "amount": { "type": "number" },
+          "finalAmount": { "type": "number" },
+          "paymentMethod": { "type": "string", "enum": ["cash", "upi", "credit_card", "debit_card", "bank_transfer", "wallet"] },
+          "status": { "type": "string", "enum": ["paid", "pending", "partial", "refunded", "failed"] }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "isSystemRole": { "type": "boolean" },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "module": { "type": "string" },
+                "actions": {
+                  "type": "object",
+                  "properties": {
+                    "view": { "type": "boolean" }, "create": { "type": "boolean" },
+                    "update": { "type": "boolean" }, "delete": { "type": "boolean" }, "export": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": { "success": { "type": "boolean", "example": false }, "message": { "type": "string" } }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"], "summary": "Log in with email + password", "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string" }, "password": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Login successful, returns user + access token (refresh token set as httpOnly cookie)" },
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } },
+          "423": { "description": "Account locked after repeated failed attempts" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": { "tags": ["Auth"], "summary": "Get the current authenticated user", "responses": { "200": { "description": "Current user" }, "401": { "description": "Not authenticated" } } }
+    },
+    "/auth/refresh": {
+      "post": { "tags": ["Auth"], "summary": "Exchange the refresh token cookie for a new access token", "security": [], "responses": { "200": { "description": "New access token" }, "401": { "description": "Refresh token invalid/expired/revoked" } } }
+    },
+    "/auth/logout": {
+      "post": { "tags": ["Auth"], "summary": "Log out and revoke the current session", "responses": { "200": { "description": "Logged out" } } }
+    },
+    "/members": {
+      "get": {
+        "tags": ["Members"], "summary": "List members",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Search by name, phone, email, or member ID" },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Paginated member list", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Member" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Members"], "summary": "Create a member (memberId is auto-generated)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Member" } } } },
+        "responses": { "201": { "description": "Member created" }, "400": { "description": "Validation error" } }
+      }
+    },
+    "/members/{id}": {
+      "get": { "tags": ["Members"], "summary": "Get a single member's full profile", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Member" }, "404": { "description": "Not found" } } },
+      "put": { "tags": ["Members"], "summary": "Update member details", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Updated member" } } },
+      "delete": { "tags": ["Members"], "summary": "Soft-delete a member (admin only)", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Deleted" }, "403": { "description": "Insufficient permissions" } } }
+    },
+    "/memberships": {
+      "post": {
+        "tags": ["Memberships"], "summary": "Start a new membership for a member",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["memberId", "planId"], "properties": { "memberId": { "type": "string" }, "planId": { "type": "string" }, "startDate": { "type": "string", "format": "date" }, "extraDiscount": { "type": "number" } } } } } },
+        "responses": { "201": { "description": "Membership created" } }
+      }
+    },
+    "/memberships/{id}/renew": {
+      "post": { "tags": ["Memberships"], "summary": "Renew a membership on its current plan", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "201": { "description": "Renewal created" }, "400": { "description": "Max renewals reached" } } }
+    },
+    "/memberships/{id}/freeze": {
+      "post": {
+        "tags": ["Memberships"], "summary": "Freeze a membership, extending its end date",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "days": { "type": "integer" }, "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Membership frozen" }, "400": { "description": "Freeze days exceeded or plan doesn't allow freezing" } }
+      }
+    },
+    "/payments": {
+      "get": {
+        "tags": ["Payments"], "summary": "List payments",
+        "parameters": [{ "name": "status", "in": "query", "schema": { "type": "string" } }, { "name": "method", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Paginated payments", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Payment" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Payments"], "summary": "Record a payment and generate its invoice",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["memberId", "amount", "paymentMethod"], "properties": { "memberId": { "type": "string" }, "membershipId": { "type": "string" }, "amount": { "type": "number" }, "discount": { "type": "number" }, "tax": { "type": "number" }, "paymentMethod": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Payment recorded" } }
+      }
+    },
+    "/payments/{id}/refund": {
+      "post": {
+        "tags": ["Payments"], "summary": "Refund a payment (full or partial)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["amount"], "properties": { "amount": { "type": "number" }, "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Refund recorded" }, "400": { "description": "Refund amount invalid" } }
+      }
+    },
+    "/roles": {
+      "get": { "tags": ["Roles"], "summary": "List custom roles (admin only)", "responses": { "200": { "description": "Roles", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Role" } } } } } } } } },
+      "post": {
+        "tags": ["Roles"], "summary": "Create a custom role with a permission matrix (admin only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Role" } } } },
+        "responses": { "201": { "description": "Role created" }, "409": { "description": "Role name already exists" } }
+      }
+    },
+    "/roles/modules": {
+      "get": { "tags": ["Roles"], "summary": "List the modules + actions available for building a permission matrix", "responses": { "200": { "description": "Modules and actions" } } }
+    }
+  }
+}

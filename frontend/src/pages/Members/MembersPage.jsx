@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
+import { downloadCsv } from '../../utils/downloadCsv';
 import { memberApi } from '../../services/memberApi';
 import { dashboardApi } from '../../services/dashboardApi';
 import Badge from '../../components/common/Badge';
@@ -114,7 +115,31 @@ const MembersPage = () => {
     setImporting(true);
     try {
       const { data } = await memberApi.import(file);
-      toast.success(`Imported ${data.data.created} member(s)${data.data.failed.length ? `, ${data.data.failed.length} failed` : ''}`);
+      const { created, failed } = data.data;
+
+      if (failed.length > 0) {
+        toast(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <span>
+                Imported {created} member(s), {failed.length} row{failed.length === 1 ? '' : 's'} failed.
+              </span>
+              <button
+                onClick={() => {
+                  downloadCsv('import-failures.csv', failed.map((f) => ({ row: f.row, reason: f.reason })));
+                  toast.dismiss(t.id);
+                }}
+                className="self-start rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+              >
+                Download failure report
+              </button>
+            </div>
+          ),
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(`Imported ${created} member(s)`);
+      }
       fetchMembers(1);
       fetchSummary();
     } catch (err) {

@@ -1,5 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
+const { can } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
@@ -26,13 +27,13 @@ const memberValidation = [
 
 // Order matters: static paths before the /:id param route
 router.get('/export', protect, exportMembers);
-router.post('/import', protect, authorize('admin'), uploadSpreadsheet.single('file'), importMembers);
+router.post('/import', protect, can('members', 'create'), uploadSpreadsheet.single('file'), importMembers);
 
 router.get('/', protect, listMembers);
 router.get('/:id', protect, getMember);
 router.post('/', protect, memberValidation, validate, createMember); // admin + receptionist can register members
 router.put('/:id', protect, memberValidation, validate, updateMember);
 router.patch('/:id/status', protect, changeStatus);
-router.delete('/:id', protect, authorize('admin'), deleteMember);
+router.delete('/:id', protect, can('members', 'delete'), deleteMember);
 
 module.exports = router;

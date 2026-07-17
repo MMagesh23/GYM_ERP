@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Staff = require('../models/Staff');
 const User = require('../models/User');
+const Session = require('../models/Session');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -36,21 +37,12 @@ const listStaff = asyncHandler(async (req, res) => {
   res.json({ success: true, data: staff, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 });
 
-const getStaff = asyncHandler(async (req, res) => {
-  const staff = await Staff.findById(req.params.id).populate('user', 'email isActive lastLoginAt');
-  if (!staff) throw new ApiError(404, 'Staff member not found.');
-  res.json({ success: true, data: staff });
-});
-
-// @desc  Add a new receptionist, optionally creating their login account
-// @route POST /api/staff
-// body: { name, mobile, email, address, salary, joiningDate, designation, createLogin?, password? }
 const createStaff = asyncHandler(async (req, res) => {
-  const { createLogin, password, ...body } = req.body;
+  const { createLogin, password, roleRef, ...body } = req.body;
   const employeeId = await generateEntityId('employeeId', 'EMP', 3);
 
   const payload = { ...body, employeeId };
-  if (req.file) payload.photo = saveBufferToUploads(req.file, 'staff');
+  if (req.file) payload.photo = await saveBufferToUploads(req.file, 'staff');
 
   const staff = await Staff.create(payload);
 
@@ -61,7 +53,14 @@ const createStaff = asyncHandler(async (req, res) => {
     if (existing) throw new ApiError(409, 'A user with this email already exists.');
 
     generatedPassword = password || crypto.randomBytes(6).toString('hex');
-    const user = new User({ name: body.name, email: body.email, phone: body.mobile, role: 'receptionist', staffProfile: staff._id });
+    const user = new User({
+      name: body.name,
+      email: body.email,
+      phone: body.mobile,
+      role: 'receptionist',
+      roleRef: roleRef || undefined,
+      staffProfile: staff._id,
+    });
     await user.setPassword(generatedPassword);
     await user.save();
 
@@ -79,24 +78,34 @@ const createStaff = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: staff, temporaryPassword: generatedPassword });
 });
 
-// @desc  Update staff profile
-// @route PUT /api/staff/:id
 const updateStaff = asyncHandler(async (req, res) => {
   const staff = await Staff.findById(req.params.id);
   if (!staff) throw new ApiError(404, 'Staff member not found.');
 
-  const { employeeId, ...updates } = req.body;
+  const { employeeId, roleRef, ...updates } = req.body;
   Object.assign(staff, updates);
-  if (req.file) staff.photo = saveBufferToUploads(req.file, 'staff');
+  if (req.file) staff.photo = await saveBufferToUploads(req.file, 'staff');
   await staff.save();
 
-  // Keep the linked login account's contact info in sync
+  // Keep the linked login account's contact info (and optionally custom role) in sync
   if (staff.user) {
-    await User.findByIdAndUpdate(staff.user, { name: staff.name, phone: staff.mobile });
+    const userUpdates = { name: staff.name, phone: staff.mobile };
+    if (roleRef !== undefined) userUpdates.roleRef = roleRef || null;
+    await User.findByIdAndUpdate(staff.user, userUpdates);
   }
 
   await logAudit(req, { action: 'update', module: 'staff', targetId: staff._id, description: `Updated staff ${staff.employeeId}` });
 
+  res.json({ success: true, data: staff });
+});
+
+const getStaff = asyncHandler(async (req, res) => {
+  const staff = await Staff.findById(req.params.id).populate({
+    path: 'user',
+    select: 'email isActive lastLoginAt roleRef',
+    populate: { path: 'roleRef', select: 'name' },
+  });
+  if (!staff) throw new ApiError(404, 'Staff member not found.');
   res.json({ success: true, data: staff });
 });
 
@@ -137,16 +146,21 @@ const resetPassword = asyncHandler(async (req, res) => {
   if (!user) throw new ApiError(404, 'Linked user account not found.');
 
   await user.setPassword(newPassword);
-  user.refreshTokenHash = null; // force re-login everywhere
   user.loginAttempts = 0;
   user.lockUntil = undefined;
   await user.save();
+
+  // Force re-login everywhere: revoke every active session tied to this user
+  await Session.updateMany(
+    { user: user._id, revoked: false },
+    { revoked: true, revokedAt: new Date(), revokedReason: 'password_reset' }
+  );
 
   await logAudit(req, {
     action: 'update',
     module: 'staff',
     targetId: staff._id,
-    description: `Password reset for staff ${staff.employeeId}`,
+    description: `Password reset for staff ${staff.employeeId} (all sessions revoked)`,
   });
 
   res.json({ success: true, message: 'Password reset.', temporaryPassword: newPassword });

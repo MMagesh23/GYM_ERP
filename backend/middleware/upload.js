@@ -10,14 +10,21 @@ const imageFilter = (req, file, cb) => {
   cb(new ApiError(400, 'Only image files are allowed.'));
 };
 
+// Mimetype alone is unreliable for spreadsheets — Windows/Excel frequently sends CSV
+// as 'application/vnd.ms-excel' or 'text/plain' instead of 'text/csv'. We gate on
+// extension here and let the controller do the authoritative format detection.
+const SPREADSHEET_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
+
 const spreadsheetFilter = (req, file, cb) => {
-  const allowed = [
-    'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  ];
-  if (allowed.includes(file.mimetype)) return cb(null, true);
-  cb(new ApiError(400, 'Only CSV or Excel (.xlsx) files are allowed.'));
+  const ext = file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase();
+  if (!SPREADSHEET_EXTENSIONS.includes(ext)) {
+    return cb(new ApiError(400, 'Only .csv or .xlsx files are allowed.'));
+  }
+  if (ext === '.xls') {
+    // exceljs only supports the zip-based OOXML .xlsx format, not legacy binary .xls
+    return cb(new ApiError(400, 'Legacy .xls files are not supported. Please save the file as .xlsx or .csv and try again.'));
+  }
+  return cb(null, true);
 };
 
 const documentFilter = (req, file, cb) => {

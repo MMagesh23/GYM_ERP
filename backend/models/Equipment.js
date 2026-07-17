@@ -27,6 +27,7 @@ const equipmentSchema = new mongoose.Schema(
     notes: { type: String, default: '' },
 
     photo: { type: String, default: '' },
+    isDeleted: { type: Boolean, default: false }, // soft delete — preserves maintenance history
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

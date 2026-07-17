@@ -8,6 +8,8 @@ const rateLimit = require('express-rate-limit');
 
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const swaggerUi = require('swagger-ui-express');
+const openapiSpec = require('./docs/openapi.json');
 
 const app = express();
 
@@ -37,6 +39,8 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 

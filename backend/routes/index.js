@@ -15,8 +15,6 @@ router.use('/dashboard', require('./dashboardRoutes'));
 router.use('/notifications', require('./notificationRoutes'));
 router.use('/reports', require('./reportRoutes'));
 router.use('/audit-logs', require('./auditLogRoutes'));
-// router.use('/reports', require('./reportRoutes'));
-// router.use('/audit-logs', require('./auditLogRoutes'));
-// router.use('/dashboard', require('./dashboardRoutes'));
+router.use('/roles', require('./roleRoutes'));
 
 module.exports = router;

@@ -9,6 +9,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { generateEntityId } = require('../utils/idGenerator');
 const { streamInvoicePdf } = require('../utils/generateInvoicePdf');
+const { validateRefundAmount } = require('../utils/billing');
 
 // @desc  Record a new payment (optionally linked to a membership) and generate its invoice
 // @route POST /api/payments
@@ -168,15 +169,13 @@ const downloadInvoice = asyncHandler(async (req, res) => {
 // @route POST /api/payments/:id/refund
 // body: { amount, reason }
 const refundPayment = asyncHandler(async (req, res) => {
-  const { amount, reason } = req.body;
+   const { amount, reason } = req.body;
   const payment = await Payment.findById(req.params.id);
   if (!payment) throw new ApiError(404, 'Payment not found.');
-  if (payment.status === 'refunded') throw new ApiError(400, 'This payment has already been fully refunded.');
 
   const refundAmount = Number(amount);
-  if (refundAmount <= 0 || refundAmount > payment.finalAmount - (payment.refund.refundedAmount || 0)) {
-    throw new ApiError(400, 'Refund amount must be positive and not exceed the remaining paid amount.');
-  }
+  const check = validateRefundAmount(payment, refundAmount);
+  if (!check.valid) throw new ApiError(400, check.message);
 
   payment.refund.isRefunded = true;
   payment.refund.refundedAmount = (payment.refund.refundedAmount || 0) + refundAmount;

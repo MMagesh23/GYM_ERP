@@ -3,10 +3,14 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import Modal from '../../components/common/Modal';
 import { staffApi } from '../../services/staffApi';
+import { roleApi } from '../../services/roleApi';
 
 const StaffFormModal = ({ open, onClose, onSaved, staff, onCredentialsIssued }) => {
   const isEdit = Boolean(staff);
   const [photoFile, setPhotoFile] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [roleRefValue, setRoleRefValue] = useState('');
+  const [hasLogin, setHasLogin] = useState(false);
   const {
     register,
     handleSubmit,
@@ -19,20 +23,36 @@ const StaffFormModal = ({ open, onClose, onSaved, staff, onCredentialsIssued }) 
 
   useEffect(() => {
     if (open) {
-      setPhotoFile(null);
-      reset(
-        staff
-          ? {
-              name: staff.name,
-              mobile: staff.mobile,
-              email: staff.email,
-              address: staff.address,
-              designation: staff.designation,
-              salary: staff.salary,
-              joiningDate: staff.joiningDate ? staff.joiningDate.slice(0, 10) : '',
-            }
-          : { designation: 'Receptionist', joiningDate: new Date().toISOString().slice(0, 10) }
-      );
+      roleApi.list().then(({ data }) => setRoles(data.data.filter((r) => !r.isSystemRole))).catch(() => {});
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setPhotoFile(null);
+    setRoleRefValue('');
+    setHasLogin(Boolean(staff?.user));
+    reset(
+      staff
+        ? {
+            name: staff.name,
+            mobile: staff.mobile,
+            email: staff.email,
+            address: staff.address,
+            designation: staff.designation,
+            salary: staff.salary,
+            joiningDate: staff.joiningDate ? staff.joiningDate.slice(0, 10) : '',
+          }
+        : { designation: 'Receptionist', joiningDate: new Date().toISOString().slice(0, 10) }
+    );
+
+    if (staff?._id) {
+      staffApi.get(staff._id).then(({ data }) => {
+        const linkedUser = data.data.user;
+        setHasLogin(Boolean(linkedUser));
+        const roleId = linkedUser?.roleRef?._id || linkedUser?.roleRef || '';
+        setRoleRefValue(roleId);
+      }).catch(() => {});
     }
   }, [open, staff, reset]);
 
@@ -43,6 +63,9 @@ const StaffFormModal = ({ open, onClose, onSaved, staff, onCredentialsIssued }) 
         if (val !== undefined && val !== '' && val !== false) formData.append(key, val);
       });
       if (photoFile) formData.append('photo', photoFile);
+      if (createLogin || hasLogin) {
+        formData.append('roleRef', roleRefValue || '');
+      }
 
       if (isEdit) {
         await staffApi.update(staff._id, formData);
@@ -64,6 +87,7 @@ const StaffFormModal = ({ open, onClose, onSaved, staff, onCredentialsIssued }) 
   const inputClass =
     'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800';
   const labelClass = 'mb-1 block text-sm font-medium';
+  const showRoleSelect = isEdit ? hasLogin : createLogin;
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Staff' : 'Add Staff'} size="lg">
@@ -121,19 +145,24 @@ const StaffFormModal = ({ open, onClose, onSaved, staff, onCredentialsIssued }) 
           </div>
         )}
 
+        {showRoleSelect && (
+          <div className="sm:col-span-2">
+            <label className={labelClass}>Custom role (optional)</label>
+            <select value={roleRefValue} onChange={(e) => setRoleRefValue(e.target.value)} className={inputClass}>
+              <option value="">Default receptionist access (view-only unless granted otherwise)</option>
+              {roles.map((r) => (
+                <option key={r._id} value={r._id}>{r.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">Custom roles are managed under Settings → Roles &amp; Permissions.</p>
+          </div>
+        )}
+
         <div className="sm:col-span-2 mt-2 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-          >
+          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-          >
+          <button type="submit" disabled={isSubmitting} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
             {isSubmitting ? 'Saving...' : isEdit ? 'Save changes' : 'Add staff'}
           </button>
         </div>

@@ -51,15 +51,16 @@ const settingsSchema = new mongoose.Schema(
     features: {
       qrCode: { type: Boolean, default: true },
       barcode: { type: Boolean, default: false },
-      whatsapp: { type: Boolean, default: false },
-      email: { type: Boolean, default: true },
+      email: { type: Boolean, default: false },   // now honestly reflects: not implemented
       sms: { type: Boolean, default: false },
-      attendance: { type: Boolean, default: true },
+      whatsapp: { type: Boolean, default: false },
+      attendance: { type: Boolean, default: false }, // no attendance module exists yet — see note below
       equipmentModule: { type: Boolean, default: true },
       financeModule: { type: Boolean, default: true },
       reportsModule: { type: Boolean, default: true },
       multiCurrency: { type: Boolean, default: false },
-      requireMfaForAdmin: { type: Boolean, default: false },
+      // requireMfaForAdmin removed — no MFA implementation exists; a toggle with
+      // no effect is worse than no toggle, since an admin could believe it's enforced.
     },
 
     // Social / online presence (optional but common ask for "customizable")

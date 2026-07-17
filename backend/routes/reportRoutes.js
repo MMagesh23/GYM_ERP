@@ -1,28 +1,23 @@
 const express = require('express');
 const { protect } = require('../middleware/auth');
-const { authorize } = require('../middleware/rbac');
+const { can } = require('../middleware/rbac');
+const { requireFeature } = require('../middleware/featureGate');
 const {
-  memberReport,
-  membershipReport,
-  paymentReport,
-  expenseReport,
-  profitReport,
-  profitReportPdf,
-  equipmentReport,
-  staffReport,
+  memberReport, membershipReport, paymentReport, expenseReport,
+  profitReport, profitReportPdf, equipmentReport, staffReport,
 } = require('../controllers/reportController');
 
 const router = express.Router();
+router.use(requireFeature('reportsModule'));
+router.use(protect);
 
-router.use(protect, authorize('admin'));
-
-router.get('/members', memberReport);
-router.get('/memberships', membershipReport);
-router.get('/payments', paymentReport);
-router.get('/expenses', expenseReport);
-router.get('/profit', profitReport);
-router.get('/profit/pdf', profitReportPdf);
-router.get('/equipment', equipmentReport);
-router.get('/staff', staffReport);
+router.get('/members', can('reports', 'export'), memberReport);
+router.get('/memberships', can('reports', 'export'), membershipReport);
+router.get('/payments', can('reports', 'export'), paymentReport);
+router.get('/expenses', can('reports', 'export'), expenseReport);
+router.get('/profit', can('reports', 'export'), profitReport);
+router.get('/profit/pdf', can('reports', 'export'), profitReportPdf);
+router.get('/equipment', can('reports', 'export'), equipmentReport);
+router.get('/staff', can('reports', 'export'), staffReport);
 
 module.exports = router;

@@ -1,4 +1,5 @@
 const express = require('express');
+const { can } = require('../middleware/rbac');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
 const { listNotifications, markRead, markAllRead, generateNow } = require('../controllers/notificationController');
@@ -8,6 +9,6 @@ const router = express.Router();
 router.get('/', protect, listNotifications);
 router.patch('/read-all', protect, markAllRead);
 router.patch('/:id/read', protect, markRead);
-router.post('/generate', protect, authorize('admin'), generateNow);
+router.post('/generate', protect, can('notifications', 'create'), generateNow);
 
 module.exports = router;

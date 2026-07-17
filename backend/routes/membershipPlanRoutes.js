@@ -1,5 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
+const { can } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
@@ -15,8 +16,8 @@ const planValidation = [
 
 router.get('/', protect, listPlans);
 router.get('/:id', protect, getPlan);
-router.post('/', protect, authorize('admin'), planValidation, validate, createPlan);
-router.put('/:id', protect, authorize('admin'), updatePlan);
-router.delete('/:id', protect, authorize('admin'), deactivatePlan);
+router.post('/', protect, can('memberships', 'create'), planValidation, validate, createPlan);
+router.put('/:id', protect, can('memberships', 'update'), updatePlan);
+router.delete('/:id', protect, can('memberships', 'delete'), deactivatePlan);
 
 module.exports = router;
