@@ -1,28 +1,136 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, RefreshCw, Snowflake, XCircle } from 'lucide-react';
+import {
+  ArrowLeft, RefreshCw, Snowflake, XCircle, Pencil, Phone, Mail, MapPin, Cake,
+  Ruler, Weight, Briefcase, HeartPulse, StickyNote, ArrowRightLeft, Repeat,
+  FileText, CreditCard, CalendarClock, ShieldCheck,
+} from 'lucide-react';
 import { memberApi } from '../../services/memberApi';
 import { membershipApi } from '../../services/membershipApi';
+import { paymentApi } from '../../services/paymentApi';
+import Avatar from '../../components/common/Avatar';
 import Badge from '../../components/common/Badge';
+import ProgressBar from '../../components/common/ProgressBar';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import EmptyState from '../../components/common/EmptyState';
+import { SkeletonBlock } from '../../components/common/Skeleton';
 import AssignMembershipModal from './AssignMembershipModal';
+import ChangePlanModal from './ChangePlanModal';
+import TransferMembershipModal from './TransferMembershipModal';
+import FreezeMembershipModal from './FreezeMembershipModal';
+import MemberFormModal from './MemberFormModal';
+import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency, formatDate } from '../../utils/memberHelpers';
+
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'history', label: 'Membership History' },
+  { key: 'payments', label: 'Payments' },
+];
+
+const InfoRow = ({ icon: Icon, label, value }) => (
+  <div className="flex items-start gap-3 py-2.5">
+    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400 dark:bg-gray-800">
+      <Icon size={15} />
+    </span>
+    <div>
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{value || '—'}</p>
+    </div>
+  </div>
+);
+
+const MembershipTimelineCard = ({ record, onRenew, onFreeze, onChangePlan, onTransfer, onCancel }) => {
+  const isActive = record.status === 'active';
+
+  return (
+    <div className="relative pb-6 pl-8 last:pb-0">
+      <span
+        className={`absolute left-0 top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white dark:border-gray-900 ${
+          isActive ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+        }`}
+      />
+      <span className="absolute left-[7px] top-5 h-full w-px bg-gray-200 dark:bg-gray-800" />
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-semibold">{record.plan?.name || 'Plan'}</p>
+            <p className="text-xs capitalize text-gray-400">
+              {record.type} · {formatDate(record.startDate)} — {formatDate(record.endDate)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{formatCurrency(record.finalAmount)}</span>
+            <Badge status={record.status} dot />
+          </div>
+        </div>
+
+        {isActive && (
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+            <button
+              onClick={() => onRenew(record)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <RefreshCw size={13} /> Renew
+            </button>
+            <button
+              onClick={() => onFreeze(record)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <Snowflake size={13} /> Freeze
+            </button>
+            <button
+              onClick={() => onChangePlan(record)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <Repeat size={13} /> Change plan
+            </button>
+            <button
+              onClick={() => onTransfer(record)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <ArrowRightLeft size={13} /> Transfer
+            </button>
+            <button
+              onClick={() => onCancel(record)}
+              className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40"
+            >
+              <XCircle size={13} /> Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const MemberProfilePage = () => {
   const { id } = useParams();
   const [member, setMember] = useState(null);
   const [history, setHistory] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('overview');
+
+  const [editOpen, setEditOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [changePlanTarget, setChangePlanTarget] = useState(null);
+  const [transferTarget, setTransferTarget] = useState(null);
   const [freezeTarget, setFreezeTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [memberRes, historyRes] = await Promise.all([memberApi.get(id), membershipApi.historyForMember(id)]);
+      const [memberRes, historyRes, paymentsRes] = await Promise.all([
+        memberApi.get(id),
+        membershipApi.historyForMember(id),
+        paymentApi.list({ memberId: id, limit: 50 }),
+      ]);
       setMember(memberRes.data.data);
       setHistory(historyRes.data.data);
+      setPayments(paymentsRes.data.data);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load member');
     } finally {
@@ -34,24 +142,13 @@ const MemberProfilePage = () => {
     load();
   }, [load]);
 
-  const handleRenew = async (membershipId) => {
+  const handleRenew = async (membership) => {
     try {
-      await membershipApi.renew(membershipId);
+      await membershipApi.renew(membership._id);
       toast.success('Membership renewed');
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Renewal failed');
-    }
-  };
-
-  const handleFreeze = async (days) => {
-    try {
-      await membershipApi.freeze(freezeTarget._id, days, 'Requested by member');
-      toast.success('Membership frozen');
-      setFreezeTarget(null);
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Freeze failed');
     }
   };
 
@@ -66,111 +163,270 @@ const MemberProfilePage = () => {
     }
   };
 
-  if (loading || !member) return <div className="p-6 text-sm text-gray-400">Loading...</div>;
+  const activeMembership = useMemo(
+    () => member?.currentMembership || history.find((h) => h.status === 'active') || null,
+    [member, history]
+  );
+
+  const membershipDaysLeft = activeMembership ? daysUntil(activeMembership.endDate) : null;
+  const urgency = membershipUrgency(membershipDaysLeft);
+
+  const membershipProgress = useMemo(() => {
+    if (!activeMembership) return 0;
+    const start = new Date(activeMembership.startDate).getTime();
+    const end = new Date(activeMembership.endDate).getTime();
+    const now = Date.now();
+    if (end <= start) return 100;
+    return Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+  }, [activeMembership]);
+
+  const totalPaid = useMemo(
+    () => payments.reduce((sum, p) => sum + (p.finalAmount - (p.refund?.refundedAmount || 0)), 0),
+    [payments]
+  );
+
+  if (loading || !member) {
+    return (
+      <div className="p-6">
+        <SkeletonBlock className="mb-4 h-8 w-40" />
+        <SkeletonBlock className="mb-6 h-40 rounded-2xl" />
+        <SkeletonBlock className="h-64 rounded-2xl" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <Link to="/members" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+    <div className="p-4 sm:p-6">
+      <Link to="/members" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
         <ArrowLeft size={16} /> Back to members
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-        <div>
-          <h1 className="text-xl font-semibold">
-            {member.firstName} {member.lastName}
-          </h1>
-          <p className="text-sm text-gray-500">
-            {member.memberId} · {member.phone} {member.email && `· ${member.email}`}
-          </p>
-          <div className="mt-2">
-            <Badge status={member.status} />
+      {/* Hero */}
+      <div className="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="h-16 bg-gradient-to-r from-brand-500 to-brand-700" />
+        <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-5">
+          <div className="-mt-8 flex items-end gap-4">
+            <Avatar firstName={member.firstName} lastName={member.lastName} photo={member.photo} size="xl" ring />
+            <div className="pb-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold">
+                  {member.firstName} {member.lastName}
+                </h1>
+                <Badge status={member.status} dot />
+              </div>
+              <p className="text-sm text-gray-500">{member.memberId}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            {member.phone && (
+              <a href={`tel:${member.phone}`} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <Phone size={14} /> Call
+              </a>
+            )}
+            {member.email && (
+              <a href={`mailto:${member.email}`} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <Mail size={14} /> Email
+              </a>
+            )}
+            <button
+              onClick={() => setEditOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              <Pencil size={14} /> Edit
+            </button>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-500">
-          <span>Gender</span>
-          <span className="text-gray-900 dark:text-gray-100 capitalize">{member.gender}</span>
-          <span>BMI</span>
-          <span className="text-gray-900 dark:text-gray-100">{member.bmi || '—'}</span>
-          <span>Joined</span>
-          <span className="text-gray-900 dark:text-gray-100">{new Date(member.joiningDate).toLocaleDateString()}</span>
+      </div>
+
+      {/* Stat row */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
+            <ShieldCheck size={13} /> Current Plan
+          </p>
+          <p className="text-lg font-semibold">{activeMembership?.plan?.name || 'No active plan'}</p>
+          {activeMembership && <p className="text-xs text-gray-400">{formatCurrency(activeMembership.finalAmount)}</p>}
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
+            <CalendarClock size={13} /> Membership Status
+          </p>
+          {activeMembership ? (
+            <>
+              <p className={`mb-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${URGENCY_STYLES[urgency]}`}>
+                {expiryLabel(membershipDaysLeft)}
+              </p>
+              <ProgressBar percent={membershipProgress} tone={urgency === 'ok' ? 'brand' : urgency} />
+            </>
+          ) : (
+            <button onClick={() => setAssignOpen(true)} className="text-sm font-medium text-brand-600 hover:underline">
+              Assign a membership →
+            </button>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
+            <CreditCard size={13} /> Total Paid
+          </p>
+          <p className="text-lg font-semibold">{formatCurrency(totalPaid)}</p>
+          <p className="text-xs text-gray-400">{payments.length} payment{payments.length === 1 ? '' : 's'}</p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
+            <Cake size={13} /> Member Since
+          </p>
+          <p className="text-lg font-semibold">{formatDate(member.joiningDate)}</p>
+          <p className="text-xs text-gray-400">BMI {member.bmi || '—'}</p>
         </div>
       </div>
 
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold">Membership History</h2>
-        {!member.currentMembership && (
+      {/* Tabs */}
+      <div className="mb-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+        {TABS.map((t) => (
           <button
-            onClick={() => setAssignOpen(true)}
-            className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+              tab === t.key
+                ? 'border-brand-600 text-brand-600'
+                : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
           >
-            Assign Membership
-          </button>
-        )}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Start</th>
-              <th className="px-4 py-3">End</th>
-              <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {history.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                  No memberships yet.
-                </td>
-              </tr>
-            ) : (
-              history.map((h) => (
-                <tr key={h._id}>
-                  <td className="px-4 py-3">{h.plan?.name}</td>
-                  <td className="px-4 py-3 capitalize">{h.type}</td>
-                  <td className="px-4 py-3">{new Date(h.startDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">{new Date(h.endDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">₹{h.finalAmount}</td>
-                  <td className="px-4 py-3">
-                    <Badge status={h.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {h.status === 'active' && (
-                      <div className="flex justify-end gap-1">
-                        <button title="Renew" onClick={() => handleRenew(h._id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
-                          <RefreshCw size={16} />
-                        </button>
-                        <button title="Freeze" onClick={() => setFreezeTarget(h)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
-                          <Snowflake size={16} />
-                        </button>
-                        <button title="Cancel" onClick={() => setCancelTarget(h)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40">
-                          <XCircle size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))
+            {t.label}
+            {t.key === 'history' && history.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">
+                {history.length}
+              </span>
             )}
-          </tbody>
-        </table>
+            {t.key === 'payments' && payments.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">
+                {payments.length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      <AssignMembershipModal open={assignOpen} onClose={() => setAssignOpen(false)} onSaved={load} memberId={id} />
+      {tab === 'overview' && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+            <h3 className="mb-1 text-sm font-semibold">Personal details</h3>
+            <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+              <InfoRow icon={Cake} label="Date of birth" value={member.dob ? formatDate(member.dob) : null} />
+              <InfoRow icon={Briefcase} label="Occupation" value={member.occupation} />
+              <InfoRow icon={MapPin} label="Address" value={member.address} />
+            </div>
+          </div>
 
-      <ConfirmDialog
-        open={Boolean(freezeTarget)}
-        title="Freeze membership"
-        message="Freeze this membership for 7 days? The end date will shift accordingly."
-        confirmLabel="Freeze 7 days"
-        onConfirm={() => handleFreeze(7)}
-        onClose={() => setFreezeTarget(null)}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+            <h3 className="mb-1 text-sm font-semibold">Health & physical</h3>
+            <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+              <InfoRow icon={Ruler} label="Height" value={member.height ? `${member.height} cm` : null} />
+              <InfoRow icon={Weight} label="Weight" value={member.weight ? `${member.weight} kg` : null} />
+              <InfoRow icon={HeartPulse} label="Medical conditions" value={member.medicalConditions} />
+            </div>
+          </div>
+
+          {member.notes && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 lg:col-span-2 dark:border-gray-800 dark:bg-gray-900">
+              <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                <StickyNote size={14} /> Notes
+              </h3>
+              <p className="whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">{member.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm text-gray-500">Full lifecycle of this member's memberships, most recent first.</p>
+            {!activeMembership && (
+              <button onClick={() => setAssignOpen(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+                Assign Membership
+              </button>
+            )}
+          </div>
+
+          {history.length === 0 ? (
+            <EmptyState icon={ShieldCheck} title="No memberships yet" description="Assign a plan to start this member's journey." />
+          ) : (
+            <div className="pl-1">
+              {history.map((h) => (
+                <MembershipTimelineCard
+                  key={h._id}
+                  record={h}
+                  onRenew={handleRenew}
+                  onFreeze={setFreezeTarget}
+                  onChangePlan={setChangePlanTarget}
+                  onTransfer={setTransferTarget}
+                  onCancel={setCancelTarget}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          {payments.length === 0 ? (
+            <EmptyState icon={CreditCard} title="No payments yet" description="Payments recorded for this member will show up here." />
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+                <tr>
+                  <th className="px-4 py-3">Invoice #</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">Method</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Invoice</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {payments.map((p) => (
+                  <tr key={p._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
+                    <td className="px-4 py-3">{formatCurrency(p.finalAmount)}</td>
+                    <td className="px-4 py-3 capitalize">{p.paymentMethod.replace('_', ' ')}</td>
+                    <td className="px-4 py-3">{formatDate(p.paymentDate)}</td>
+                    <td className="px-4 py-3">
+                      <Badge status={p.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        title="Download invoice"
+                        onClick={() => paymentApi.downloadInvoice(p._id, p.invoiceNumber)}
+                        className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <FileText size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      <MemberFormModal open={editOpen} member={member} onClose={() => setEditOpen(false)} onSaved={load} />
+      <AssignMembershipModal open={assignOpen} onClose={() => setAssignOpen(false)} onSaved={load} memberId={id} />
+      <ChangePlanModal open={Boolean(changePlanTarget)} membership={changePlanTarget} onClose={() => setChangePlanTarget(null)} onSaved={load} />
+      <TransferMembershipModal
+        open={Boolean(transferTarget)}
+        membership={transferTarget}
+        currentMemberName={`${member.firstName} ${member.lastName || ''}`.trim()}
+        onClose={() => setTransferTarget(null)}
+        onSaved={load}
       />
+      <FreezeMembershipModal open={Boolean(freezeTarget)} membership={freezeTarget} onClose={() => setFreezeTarget(null)} onSaved={load} />
 
       <ConfirmDialog
         open={Boolean(cancelTarget)}

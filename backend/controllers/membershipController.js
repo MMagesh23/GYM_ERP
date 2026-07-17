@@ -296,7 +296,10 @@ const expiringSoon = asyncHandler(async (req, res) => {
 // @route GET /api/memberships/member/:memberId
 const historyForMember = asyncHandler(async (req, res) => {
   const memberships = await Membership.find({ member: req.params.memberId })
-    .populate('plan', 'name durationType price')
+    // Populate the full plan document (not just name/durationType/price) so the
+    // freeze/change-plan/transfer UI has freezeDays, freezeAllowed, joiningFee,
+    // discount, and tax available regardless of which history record it opened from.
+    .populate('plan')
     .sort({ createdAt: -1 });
   res.json({ success: true, data: memberships });
 });
