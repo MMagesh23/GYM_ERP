@@ -3,7 +3,6 @@ const { body } = require('express-validator');
 const { can } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { authorize } = require('../middleware/rbac');
 const { uploadSpreadsheet } = require('../middleware/upload');
 const {
   listMembers,
@@ -25,15 +24,16 @@ const memberValidation = [
   body('email').optional({ checkFalsy: true }).isEmail().withMessage('Email must be valid'),
 ];
 
-// Order matters: static paths before the /:id param route
-router.get('/export', protect, exportMembers);
+
+router.get('/export', protect, can('members', 'export'), exportMembers);
 router.post('/import', protect, can('members', 'create'), uploadSpreadsheet.single('file'), importMembers);
 
-router.get('/', protect, listMembers);
-router.get('/:id', protect, getMember);
-router.post('/', protect, memberValidation, validate, createMember); // admin + receptionist can register members
-router.put('/:id', protect, memberValidation, validate, updateMember);
-router.patch('/:id/status', protect, changeStatus);
+router.get('/', protect, can('members', 'view'), listMembers);
+router.get('/:id', protect, can('members', 'view'), getMember);
+router.post('/', protect, can('members', 'create'), memberValidation, validate, createMember);
+router.put('/:id', protect, can('members', 'update'), memberValidation, validate, updateMember);
+
+router.patch('/:id/status', protect, can('members', 'update'), changeStatus);
 router.delete('/:id', protect, can('members', 'delete'), deleteMember);
 
 module.exports = router;

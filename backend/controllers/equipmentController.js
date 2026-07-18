@@ -43,14 +43,16 @@ const getEquipment = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...item.toObject(), maintenanceHistory } });
 });
 
-
-
 // @desc  Create equipment (auto-generates equipmentId), optional photo upload
 // @route POST /api/equipment
 const createEquipment = asyncHandler(async (req, res) => {
   const equipmentId = await generateEntityId('equipmentId', 'EQP', 3);
   const payload = { ...req.body, equipmentId, createdBy: req.user._id };
-  if (req.file) payload.photo = saveBufferToUploads(req.file, 'equipment');
+  // FIX: saveBufferToUploads is async and returns a Promise. Missing `await` here
+  // previously caused `payload.photo` to be assigned a Promise object, which
+  // Mongoose then cast to the string "[object Promise]" on save — silently
+  // corrupting every equipment photo. Always await it.
+  if (req.file) payload.photo = await saveBufferToUploads(req.file, 'equipment');
 
   const item = await Equipment.create(payload);
 
@@ -67,7 +69,8 @@ const updateEquipment = asyncHandler(async (req, res) => {
 
   const { equipmentId, ...updates } = req.body;
   Object.assign(item, updates);
-  if (req.file) item.photo = saveBufferToUploads(req.file, 'equipment');
+  // FIX: same missing-await bug as createEquipment above.
+  if (req.file) item.photo = await saveBufferToUploads(req.file, 'equipment');
   await item.save();
 
   await logAudit(req, { action: 'update', module: 'equipment', targetId: item._id, description: `Updated equipment ${item.equipmentId}` });

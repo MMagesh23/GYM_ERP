@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, Search, Download, Upload, Pencil, Trash2, Snowflake, Ban, RotateCcw,
-  Users, UserCheck, UserPlus, Clock, X,
+  Plus, Search, Download, Upload, Pencil, Trash2, Ban, RotateCcw,
+  Users, UserCheck, UserPlus, Clock, X, Snowflake,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
@@ -311,6 +311,7 @@ const MembersPage = () => {
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                         <button
                           title="Edit"
+                          aria-label="Edit member"
                           onClick={() => {
                             setEditingMember(m);
                             setFormOpen(true);
@@ -319,35 +320,57 @@ const MembersPage = () => {
                         >
                           <Pencil size={16} />
                         </button>
-                        {m.status !== 'freeze' ? (
-                          <button
-                            title="Freeze"
-                            onClick={() => handleStatusChange(m, 'freeze')}
-                            className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+
+                        {/*
+                          FIX: the old "Freeze" quick-action here called
+                          memberApi.changeStatus(id, 'freeze'), which only flips
+                          Member.status and does NOT touch the Membership record
+                          (endDate, freezeHistory, plan freeze-day allowance).
+                          Meanwhile the Member Profile page's "Freeze" button
+                          calls membershipApi.freeze(), which correctly extends
+                          the membership end date. Having both meant a receptionist
+                          using this quick action believed billing/expiry dates had
+                          moved when they hadn't — a real billing-correctness bug.
+                          Freezing now only happens through the membership-aware
+                          flow on the profile page; if a membership is currently
+                          frozen we link there instead of offering a second,
+                          inconsistent path to "unfreeze".
+                        */}
+                        {m.status === 'freeze' || m.currentMembership?.status === 'frozen' ? (
+                          <Link
+                            to={`/members/${m._id}`}
+                            title="Frozen — manage in profile"
+                            aria-label="Frozen — manage in profile"
+                            className="rounded-lg p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                           >
                             <Snowflake size={16} />
-                          </button>
+                          </Link>
                         ) : (
+                          m.status !== 'suspended' && (
+                            <button
+                              title="Suspend"
+                              aria-label="Suspend member"
+                              onClick={() => handleStatusChange(m, 'suspended')}
+                              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            >
+                              <Ban size={16} />
+                            </button>
+                          )
+                        )}
+                        {m.status === 'suspended' && (
                           <button
                             title="Reactivate"
+                            aria-label="Reactivate member"
                             onClick={() => handleStatusChange(m, 'active')}
                             className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                           >
                             <RotateCcw size={16} />
                           </button>
                         )}
-                        {m.status !== 'suspended' && (
-                          <button
-                            title="Suspend"
-                            onClick={() => handleStatusChange(m, 'suspended')}
-                            className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          >
-                            <Ban size={16} />
-                          </button>
-                        )}
                         {user?.role === 'admin' && (
                           <button
                             title="Delete"
+                            aria-label="Delete member"
                             onClick={() => setDeleteTarget(m)}
                             className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
                           >

@@ -14,12 +14,41 @@ const {
 const MAX_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS) || 5;
 const LOCK_MINUTES = Number(process.env.LOCK_TIME_MINUTES) || 15;
 
+// FIX (production deployment bug): this was hardcoded to `sameSite: 'strict'`.
+// The README's own recommended deployment (Vercel frontend + Render/Railway
+// backend) puts the frontend and backend on different origins/domains. Browsers
+// will NOT send a SameSite=Strict (or even Lax, for the cross-site XHR case here)
+// cookie on a cross-origin request, so /auth/refresh silently fails in exactly the
+// topology this project recommends — even though it works fine in local dev, where
+// Vite's proxy makes everything same-origin. This regularly presents as "user gets
+// logged out a few minutes after logging in, only in production."
+//
+// Now configurable via env so it can be tightened back to 'strict'/'lax' whenever
+// frontend and backend truly share a top-level domain (e.g. app.example.com +
+// api.example.com behind the same eTLD+1 with sameSite: 'lax', or a single combined
+// deployment). Defaults to 'lax' + secure-only-in-production, matching same-domain
+// same-origin local dev behavior unchanged.
+const COOKIE_SAME_SITE = process.env.REFRESH_COOKIE_SAMESITE || 'lax'; // 'strict' | 'lax' | 'none'
+const COOKIE_SECURE =
+  process.env.REFRESH_COOKIE_SECURE !== undefined
+    ? process.env.REFRESH_COOKIE_SECURE === 'true'
+    : process.env.NODE_ENV === 'production';
+
+if (COOKIE_SAME_SITE === 'none' && !COOKIE_SECURE) {
+  // Browsers reject SameSite=None cookies that aren't also Secure.
+  console.warn(
+    'REFRESH_COOKIE_SAMESITE=none requires REFRESH_COOKIE_SECURE=true (or NODE_ENV=production). ' +
+      'The refresh-token cookie will be rejected by browsers until this is fixed.'
+  );
+}
+
 const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  secure: COOKIE_SECURE,
+  sameSite: COOKIE_SAME_SITE,
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/api/auth',
+  ...(process.env.REFRESH_COOKIE_DOMAIN ? { domain: process.env.REFRESH_COOKIE_DOMAIN } : {}),
 };
 
 // @desc  Register a new user (admin-only in practice; gate with authorize('admin') in routes)

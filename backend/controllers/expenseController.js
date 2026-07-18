@@ -45,7 +45,10 @@ const getExpense = asyncHandler(async (req, res) => {
 // @route POST /api/expenses  (multipart/form-data if a bill is attached)
 const createExpense = asyncHandler(async (req, res) => {
   const payload = { ...req.body, createdBy: req.user._id };
-  if (req.file) payload.billUrl = saveBufferToUploads(req.file, 'bills');
+  // FIX: missing `await` previously stored the string "[object Promise]" as the
+  // billUrl instead of the actual uploaded file URL — every expense receipt
+  // upload was silently broken.
+  if (req.file) payload.billUrl = await saveBufferToUploads(req.file, 'bills');
 
   const expense = await Expense.create(payload);
 
@@ -66,7 +69,8 @@ const updateExpense = asyncHandler(async (req, res) => {
   if (!expense) throw new ApiError(404, 'Expense not found.');
 
   Object.assign(expense, req.body);
-  if (req.file) expense.billUrl = saveBufferToUploads(req.file, 'bills');
+  // FIX: same missing-await bug as createExpense above.
+  if (req.file) expense.billUrl = await saveBufferToUploads(req.file, 'bills');
   await expense.save();
 
   await logAudit(req, { action: 'update', module: 'expenses', targetId: expense._id, description: `Updated expense "${expense.title}"` });

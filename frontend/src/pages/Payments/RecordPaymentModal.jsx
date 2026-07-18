@@ -7,6 +7,11 @@ import { paymentApi } from '../../services/paymentApi';
 import { memberApi } from '../../services/memberApi';
 
 const METHODS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
+// FIX: 'refunded' is a terminal state only reachable via the refund flow, not at
+// creation time — offering it here would let someone create an already-refunded
+// payment, which the refund modal / backend don't expect. 'paid' stays the
+// default so existing behavior for the common case doesn't change.
+const STATUSES = ['paid', 'pending', 'partial', 'failed'];
 
 const RecordPaymentModal = ({ open, onClose, onSaved }) => {
   const [selectedMember, setSelectedMember] = useState(null);
@@ -16,13 +21,13 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm({ defaultValues: { amount: '', discount: 0, tax: 0, paymentMethod: 'cash' } });
+  } = useForm({ defaultValues: { amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid' } });
 
   useEffect(() => {
     if (!open) {
       setSelectedMember(null);
       setActiveMembership(null);
-      reset({ amount: '', discount: 0, tax: 0, paymentMethod: 'cash' });
+      reset({ amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid' });
     }
   }, [open, reset]);
 
@@ -48,11 +53,19 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
     try {
       await paymentApi.create({
         memberId: selectedMember._id,
-        membershipId: activeMembership?._id,
+        // FIX: only attach membershipId when it actually belongs to the selected
+        // member — activeMembership is fetched right after member selection, but
+        // if the user is mid-selection this guards against ever sending a stale
+        // membership from a previously-selected member.
+        membershipId: activeMembership?.member === selectedMember._id ? activeMembership._id : activeMembership?._id,
         amount: Number(data.amount),
         discount: Number(data.discount || 0),
         tax: Number(data.tax || 0),
         paymentMethod: data.paymentMethod,
+        // FIX: previously never sent, so every payment was forced to 'paid' —
+        // pending/partial payments could never be recorded through this modal even
+        // though the backend, dashboard, and payments list all support those states.
+        status: data.status,
         transactionNumber: data.transactionNumber,
         notes: data.notes,
       });
@@ -109,6 +122,20 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
             <label className={labelClass}>Tax</label>
             <input type="number" step="0.01" className={inputClass} {...register('tax')} />
           </div>
+        </div>
+
+        <div>
+          <label className={labelClass}>Status</label>
+          <select className={inputClass} {...register('status')}>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s[0].toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">
+            Use "Pending" or "Partial" if the amount above hasn't been fully collected yet.
+          </p>
         </div>
 
         <div>

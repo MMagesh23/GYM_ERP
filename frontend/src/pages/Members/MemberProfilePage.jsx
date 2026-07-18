@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, RefreshCw, Snowflake, XCircle, Pencil, Phone, Mail, MapPin, Cake,
   Ruler, Weight, Briefcase, HeartPulse, StickyNote, ArrowRightLeft, Repeat,
-  FileText, CreditCard, CalendarClock, ShieldCheck,
+  FileText, CreditCard, CalendarClock, ShieldCheck, PlayCircle,
 } from 'lucide-react';
 import { memberApi } from '../../services/memberApi';
 import { membershipApi } from '../../services/membershipApi';
@@ -40,14 +40,19 @@ const InfoRow = ({ icon: Icon, label, value }) => (
   </div>
 );
 
-const MembershipTimelineCard = ({ record, onRenew, onFreeze, onChangePlan, onTransfer, onCancel }) => {
+const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChangePlan, onTransfer, onCancel }) => {
   const isActive = record.status === 'active';
+  // FIX: previously only `status === 'active'` memberships showed any action
+  // buttons, which meant a frozen membership had NO way to be unfrozen from the
+  // UI — `membershipApi.unfreeze` existed in the service layer and on the backend
+  // but was completely unreachable. A frozen membership was stuck forever.
+  const isFrozen = record.status === 'frozen';
 
   return (
     <div className="relative pb-6 pl-8 last:pb-0">
       <span
         className={`absolute left-0 top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white dark:border-gray-900 ${
-          isActive ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+          isActive ? 'bg-brand-600' : isFrozen ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
         }`}
       />
       <span className="absolute left-[7px] top-5 h-full w-px bg-gray-200 dark:bg-gray-800" />
@@ -70,33 +75,51 @@ const MembershipTimelineCard = ({ record, onRenew, onFreeze, onChangePlan, onTra
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
             <button
               onClick={() => onRenew(record)}
+              aria-label="Renew membership"
               className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <RefreshCw size={13} /> Renew
             </button>
             <button
               onClick={() => onFreeze(record)}
+              aria-label="Freeze membership"
               className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <Snowflake size={13} /> Freeze
             </button>
             <button
               onClick={() => onChangePlan(record)}
+              aria-label="Change plan"
               className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <Repeat size={13} /> Change plan
             </button>
             <button
               onClick={() => onTransfer(record)}
+              aria-label="Transfer membership"
               className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ArrowRightLeft size={13} /> Transfer
             </button>
             <button
               onClick={() => onCancel(record)}
+              aria-label="Cancel membership"
               className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40"
             >
               <XCircle size={13} /> Cancel
+            </button>
+          </div>
+        )}
+
+        {isFrozen && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+            <p className="mr-1 text-xs text-gray-400">Frozen — resume to restore normal billing dates.</p>
+            <button
+              onClick={() => onUnfreeze(record)}
+              aria-label="Unfreeze membership"
+              className="flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+            >
+              <PlayCircle size={13} /> Unfreeze
             </button>
           </div>
         )}
@@ -119,6 +142,7 @@ const MemberProfilePage = () => {
   const [transferTarget, setTransferTarget] = useState(null);
   const [freezeTarget, setFreezeTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [unfreezeTarget, setUnfreezeTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,8 +187,20 @@ const MemberProfilePage = () => {
     }
   };
 
+  // FIX: new handler wired to the previously-unreachable unfreeze endpoint.
+  const handleUnfreeze = async () => {
+    try {
+      await membershipApi.unfreeze(unfreezeTarget._id);
+      toast.success('Membership unfrozen — active again');
+      setUnfreezeTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not unfreeze membership');
+    }
+  };
+
   const activeMembership = useMemo(
-    () => member?.currentMembership || history.find((h) => h.status === 'active') || null,
+    () => member?.currentMembership || history.find((h) => h.status === 'active' || h.status === 'frozen') || null,
     [member, history]
   );
 
@@ -255,7 +291,7 @@ const MemberProfilePage = () => {
           {activeMembership ? (
             <>
               <p className={`mb-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${URGENCY_STYLES[urgency]}`}>
-                {expiryLabel(membershipDaysLeft)}
+                {activeMembership.status === 'frozen' ? 'Frozen' : expiryLabel(membershipDaysLeft)}
               </p>
               <ProgressBar percent={membershipProgress} tone={urgency === 'ok' ? 'brand' : urgency} />
             </>
@@ -362,6 +398,7 @@ const MemberProfilePage = () => {
                   record={h}
                   onRenew={handleRenew}
                   onFreeze={setFreezeTarget}
+                  onUnfreeze={setUnfreezeTarget}
                   onChangePlan={setChangePlanTarget}
                   onTransfer={setTransferTarget}
                   onCancel={setCancelTarget}
@@ -401,6 +438,7 @@ const MemberProfilePage = () => {
                     <td className="px-4 py-3 text-right">
                       <button
                         title="Download invoice"
+                        aria-label="Download invoice"
                         onClick={() => paymentApi.downloadInvoice(p._id, p.invoiceNumber)}
                         className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                       >
@@ -436,6 +474,16 @@ const MemberProfilePage = () => {
         danger
         onConfirm={handleCancel}
         onClose={() => setCancelTarget(null)}
+      />
+
+      {/* FIX: new confirm dialog wired to the previously-unreachable unfreeze action. */}
+      <ConfirmDialog
+        open={Boolean(unfreezeTarget)}
+        title="Unfreeze membership"
+        message="Resume this membership now? It will become active again immediately."
+        confirmLabel="Unfreeze"
+        onConfirm={handleUnfreeze}
+        onClose={() => setUnfreezeTarget(null)}
       />
     </div>
   );

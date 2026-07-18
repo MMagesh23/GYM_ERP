@@ -32,7 +32,10 @@ const uploadLogo = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'No logo file uploaded.');
 
   const settings = await Settings.getSingleton();
-  settings.gymLogo = saveBufferToUploads(req.file, 'branding');
+  // FIX: missing `await` previously stored "[object Promise]" as the logo URL
+  // instead of the uploaded file's URL — every logo upload was silently broken
+  // and the sidebar/login branding would show a broken image.
+  settings.gymLogo = await saveBufferToUploads(req.file, 'branding');
   await settings.save();
 
   await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated gym logo' });
@@ -46,7 +49,8 @@ const uploadFavicon = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'No favicon file uploaded.');
 
   const settings = await Settings.getSingleton();
-  settings.favicon = saveBufferToUploads(req.file, 'branding');
+  // FIX: same missing-await bug as uploadLogo above.
+  settings.favicon = await saveBufferToUploads(req.file, 'branding');
   await settings.save();
 
   await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated favicon' });

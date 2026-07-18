@@ -7,10 +7,8 @@ const authorize = (...allowedRoles) => (req, res, next) => {
   return next(new ApiError(403, 'You do not have permission to perform this action.'));
 };
 
-// Modules a plain receptionist (no custom Role assigned) could already reach via
-// unrestricted routes before this — kept as the safe default so converting
-// authorize('admin')-only routes to can() below never *loosens* access.
 const OPEN_BY_DEFAULT_MODULES = ['dashboard', 'members', 'memberships', 'payments', 'equipment', 'notifications'];
+const OPEN_BY_DEFAULT_ACTIONS = ['view', 'create', 'update']; // matches seed.js default Receptionist role; delete/export excluded
 
 const can = (moduleName, action) => async (req, res, next) => {
   if (!req.user) return next(new ApiError(401, 'Not authenticated.'));
@@ -20,7 +18,7 @@ const can = (moduleName, action) => async (req, res, next) => {
   const roleDoc = req.user.roleRef;
 
   if (!roleDoc) {
-    if (action === 'view' && OPEN_BY_DEFAULT_MODULES.includes(moduleName)) return next();
+    if (OPEN_BY_DEFAULT_MODULES.includes(moduleName) && OPEN_BY_DEFAULT_ACTIONS.includes(action)) return next();
     return next(new ApiError(403, `You do not have permission to ${action} ${moduleName}.`));
   }
 

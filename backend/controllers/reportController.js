@@ -8,6 +8,7 @@ const Equipment = require('../models/Equipment');
 const Staff = require('../models/Staff');
 const Settings = require('../models/Settings');
 const asyncHandler = require('../utils/asyncHandler');
+const { registerFonts } = require('../utils/pdfFonts');
 
 // Writes a workbook to the response as .xlsx or .csv depending on the `format` query param
 const sendWorkbook = async (res, workbook, filenameBase, format) => {
@@ -202,16 +203,21 @@ const profitReportPdf = asyncHandler(async (req, res) => {
   const totalExpense = rows.reduce((s, r) => s + r.expense, 0);
 
   const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  // FIX: register a Unicode font so the ₹ currency symbol (and any other
+  // non-Latin-1 characters in gymName, etc.) render correctly instead of a
+  // missing-glyph box — same root cause as generateInvoicePdf.js.
+  const font = registerFonts(doc);
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="profit-report-${year}.pdf"`);
   doc.pipe(res);
 
-  doc.fontSize(18).font('Helvetica-Bold').text(`${settings.gymName} — Profit Report ${year}`);
+  doc.fontSize(18).font(font.bold).text(`${settings.gymName} — Profit Report ${year}`);
   doc.moveDown(1);
 
   const col = { month: 50, revenue: 200, expense: 320, profit: 440 };
   let y = doc.y;
-  doc.fontSize(10).font('Helvetica-Bold');
+  doc.fontSize(10).font(font.bold);
   doc.text('Month', col.month, y);
   doc.text('Revenue', col.revenue, y);
   doc.text('Expenses', col.expense, y);
@@ -220,7 +226,7 @@ const profitReportPdf = asyncHandler(async (req, res) => {
   doc.moveTo(50, y).lineTo(545, y).strokeColor('#ddd').stroke();
   y += 8;
 
-  doc.font('Helvetica').fontSize(10);
+  doc.font(font.regular).fontSize(10);
   rows.forEach((r) => {
     doc.text(r.month, col.month, y);
     doc.text(`${currency}${r.revenue.toFixed(2)}`, col.revenue, y);
@@ -233,7 +239,7 @@ const profitReportPdf = asyncHandler(async (req, res) => {
   y += 8;
   doc.moveTo(50, y).lineTo(545, y).strokeColor('#ddd').stroke();
   y += 10;
-  doc.font('Helvetica-Bold');
+  doc.font(font.bold);
   doc.text('Total', col.month, y);
   doc.text(`${currency}${totalRevenue.toFixed(2)}`, col.revenue, y);
   doc.text(`${currency}${totalExpense.toFixed(2)}`, col.expense, y);
