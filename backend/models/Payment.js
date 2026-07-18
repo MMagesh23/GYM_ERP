@@ -20,9 +20,12 @@ const paymentSchema = new mongoose.Schema(
     transactionNumber: { type: String, default: '' },
     paymentDate: { type: Date, default: Date.now },
 
+    // FIX: added 'partially_refunded' — a payment refunded less than in full
+    // previously had no way to record that distinctly from a fully-paid, never
+    // refunded payment. See paymentController.refundPayment.
     status: {
       type: String,
-      enum: ['paid', 'pending', 'partial', 'refunded', 'failed'],
+      enum: ['paid', 'pending', 'partial', 'refunded', 'partially_refunded', 'failed'],
       default: 'paid',
       index: true,
     },

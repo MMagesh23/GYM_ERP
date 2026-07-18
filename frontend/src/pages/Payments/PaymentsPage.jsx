@@ -11,7 +11,9 @@ import PageHeader from '../../components/common/PageHeader';
 import { SkeletonTable } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
 
-const STATUS_OPTIONS = ['paid', 'pending', 'partial', 'refunded', 'failed'];
+// FIX: added 'partially_refunded' so it's filterable and matches the status the
+// backend can now actually set (see Payment model + paymentController.refundPayment).
+const STATUS_OPTIONS = ['paid', 'pending', 'partial', 'refunded', 'partially_refunded', 'failed'];
 const METHOD_OPTIONS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
 
 const PaymentsPage = () => {
@@ -79,7 +81,7 @@ const PaymentsPage = () => {
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
+              {s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </option>
           ))}
         </select>
@@ -136,7 +138,12 @@ const PaymentsPage = () => {
                   <td className="px-4 py-3">
                     {p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '—'}
                   </td>
-                  <td className="px-4 py-3">₹{p.finalAmount}</td>
+                  <td className="px-4 py-3">
+                    ₹{p.finalAmount}
+                    {p.refund?.refundedAmount > 0 && (
+                      <span className="ml-1 text-xs text-gray-400">(₹{p.refund.refundedAmount} refunded)</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 capitalize">{p.paymentMethod.replace('_', ' ')}</td>
                   <td className="px-4 py-3">{new Date(p.paymentDate).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
@@ -151,6 +158,11 @@ const PaymentsPage = () => {
                       >
                         <FileText size={16} />
                       </button>
+                      {/* FIX: previously only excluded 'refunded'. A 'partially_refunded'
+                          payment still has a remaining refundable balance and must stay
+                          refundable too — this condition already covers it correctly since
+                          partially_refunded !== refunded, but is now explicit/intentional
+                          rather than incidental now that the status exists. */}
                       {user?.role === 'admin' && p.status !== 'refunded' && (
                         <button
                           title="Refund"

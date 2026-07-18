@@ -24,6 +24,13 @@ const createPayment = asyncHandler(async (req, res) => {
   if (membershipId) {
     membership = await Membership.findById(membershipId).populate('plan');
     if (!membership) throw new ApiError(404, 'Membership not found.');
+    // FIX: previously nothing verified this membership actually belongs to the
+    // member being billed. A caller could send memberId=A + membershipId=<B's
+    // membership> and the payment/invoice would be created against A while
+    // referencing B's membership record — a real cross-member data-integrity hole.
+    if (String(membership.member) !== String(member._id)) {
+      throw new ApiError(400, 'This membership does not belong to the selected member.');
+    }
   }
 
   const finalAmount = Math.round((Number(amount) - Number(discount) + Number(tax)) * 100) / 100;
@@ -181,7 +188,16 @@ const refundPayment = asyncHandler(async (req, res) => {
   payment.refund.refundedAmount = (payment.refund.refundedAmount || 0) + refundAmount;
   payment.refund.refundDate = new Date();
   payment.refund.reason = reason || '';
-  payment.status = payment.refund.refundedAmount >= payment.finalAmount ? 'refunded' : 'paid';
+  // FIX: a payment refunded less than in full silently stayed status: 'paid',
+  // which is misleading — the payments list showed a green "Paid" badge on a
+  // payment that had actually had money returned against it. Distinguish
+  // partially_refunded from fully refunded so the UI reflects reality.
+  payment.status =
+    payment.refund.refundedAmount >= payment.finalAmount
+      ? 'refunded'
+      : payment.refund.refundedAmount > 0
+      ? 'partially_refunded'
+      : payment.status;
   await payment.save();
 
   await logAudit(req, {

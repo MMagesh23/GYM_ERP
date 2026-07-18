@@ -22,6 +22,20 @@ const createMembership = asyncHandler(async (req, res) => {
   if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
   if (!plan || !plan.isActive) throw new ApiError(404, 'Membership plan not found or inactive.');
 
+  // FIX: previously this created a brand-new membership unconditionally, silently
+  // orphaning any existing active/frozen membership — member.currentMembership would
+  // just get repointed while the old record was left with status: 'active' forever,
+  // never reconciled. A member must not accidentally end up with two live memberships.
+  // Renew / change-plan / cancel are the correct paths once one already exists.
+  const existing = await Membership.findOne({ member: member._id, status: { $in: ['active', 'frozen'] } });
+  if (existing) {
+    throw new ApiError(
+      409,
+      `${member.firstName} already has ${existing.status === 'frozen' ? 'a frozen' : 'an active'} membership. ` +
+        'Use renew, change plan, or cancel it before starting a new one.'
+    );
+  }
+
   const start = startDate ? new Date(startDate) : new Date();
   const end = new Date(start.getTime() + plan.durationDays * DAY_MS);
 
@@ -55,6 +69,15 @@ const createMembership = asyncHandler(async (req, res) => {
 const renewMembership = asyncHandler(async (req, res) => {
   const current = await Membership.findById(req.params.id).populate('plan');
   if (!current) throw new ApiError(404, 'Membership not found.');
+
+  // FIX: unlike freezeMembership/changePlan, this had no status guard at all — a
+  // frozen or already-cancelled membership record could be "renewed", producing a
+  // new active membership chained off a non-active parent while the frozen one sat
+  // there unresolved. Renewal is only valid from an active membership (the normal
+  // case) or an expired one still within reach (grace-period renewal).
+  if (!['active', 'expired'].includes(current.status)) {
+    throw new ApiError(400, `Cannot renew a membership with status "${current.status}".`);
+  }
 
   const plan = current.plan;
   if (plan.maxRenewals > 0 && current.renewalCount >= plan.maxRenewals) {
@@ -152,6 +175,20 @@ const transferMembership = asyncHandler(async (req, res) => {
 
   const toMember = await Member.findById(toMemberId);
   if (!toMember || toMember.isDeleted) throw new ApiError(404, 'Target member not found.');
+  if (String(toMember._id) === String(current.member)) {
+    throw new ApiError(400, 'Cannot transfer a membership to the same member it already belongs to.');
+  }
+
+  // FIX: same active-membership-orphaning bug as createMembership, but on the
+  // receiving member — a transfer must not silently bury their existing membership.
+  const receiverExisting = await Membership.findOne({ member: toMember._id, status: { $in: ['active', 'frozen'] } });
+  if (receiverExisting) {
+    throw new ApiError(
+      409,
+      `${toMember.firstName} already has ${receiverExisting.status === 'frozen' ? 'a frozen' : 'an active'} membership ` +
+        'and cannot receive a transferred one until it is resolved.'
+    );
+  }
 
   const fromMemberId = current.member;
 

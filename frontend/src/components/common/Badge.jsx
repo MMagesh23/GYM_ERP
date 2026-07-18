@@ -12,6 +12,10 @@ const STATUS_STYLES = {
   repaired: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   retired: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
   disabled: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  // FIX: was missing — payments partially refunded fell through to the default
+  // (same look as "expired"/gray), giving no visual distinction from an untouched
+  // payment. Now visually distinct from both "paid" (green) and "refunded" (gray).
+  partially_refunded: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
 const DOT_COLORS = {
@@ -28,6 +32,7 @@ const DOT_COLORS = {
   repaired: 'bg-blue-500',
   retired: 'bg-gray-400',
   disabled: 'bg-red-500',
+  partially_refunded: 'bg-amber-500',
 };
 
 /** Pass `dot` to render a small status indicator dot alongside the label. */
