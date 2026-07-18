@@ -5,7 +5,8 @@
 html, body, #root { height: 100%; }
 body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 
-* { transition-property: background-color, border-color, color, box-shadow, transform, opacity; transition-duration: 150ms; }
+/* Smoother, slightly springy easing app-wide instead of the default linear-ish curve */
+* { transition-property: background-color, border-color, color, box-shadow, transform, opacity; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 
 /* Thin, unobtrusive scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -15,6 +16,14 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 
 /* Consistent focus ring app-wide, keyboard-only */
 :focus-visible { outline: 2px solid #3390fa; outline-offset: 2px; }
+
+/* Reusable hover-lift for clickable cards (StatCard, PlanCard, EquipmentDetail hero, etc) */
+.card-lift {
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+}
 
 /* Skeleton loading shimmer — plain CSS, not @apply, to avoid layer-order issues */
 .skeleton {
@@ -43,3 +52,10 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
+
+/* Subtle "content just settled" cue for freshly-loaded lists/cards */
+@keyframes settleIn {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-settle-in { animation: settleIn 220ms cubic-bezier(0.4, 0, 0.2, 1); }

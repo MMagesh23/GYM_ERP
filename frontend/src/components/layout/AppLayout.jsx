@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, CreditCard, Wallet, Dumbbell, UserCog, BarChart3,
   ClipboardList, ShieldCheck, Settings as SettingsIcon, Sun, Moon, LogOut,
-  Menu, X, ChevronsLeft, ChevronsRight, ChevronDown,
+  Menu, X, ChevronsLeft, ChevronsRight, ChevronDown, Search,
 } from 'lucide-react';
 import { toggleTheme, toggleSidebar } from '../../redux/slices/uiSlice';
 import { logoutUser } from '../../redux/slices/authSlice';
 import NotificationBell from './NotificationBell';
+import CommandPalette from './CommandPalette';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'receptionist'] },
@@ -25,6 +26,9 @@ const NAV_ITEMS = [
 
 const initials = (name = '') =>
   name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+
+// Detect the platform so the header hint shows the right modifier key
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 const AppLayout = () => {
   const dispatch = useDispatch();
@@ -45,6 +49,13 @@ const AppLayout = () => {
   const handleLogout = async () => {
     await dispatch(logoutUser());
     navigate('/login', { replace: true });
+  };
+
+  // Opens the command palette by simulating its own keyboard shortcut, so this
+  // button and the real ⌘K/Ctrl+K shortcut always stay in sync with one
+  // implementation living inside CommandPalette itself.
+  const openCommandPalette = () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: isMac, ctrlKey: !isMac }));
   };
 
   const visibleItems = NAV_ITEMS.filter(
@@ -117,6 +128,9 @@ const AppLayout = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Global ⌘K / Ctrl+K palette — mounted once, listens for its own shortcut */}
+      <CommandPalette userRole={user?.role} />
+
       <aside
         className={`hidden md:flex flex-col border-r border-gray-200 bg-white transition-all duration-200 dark:border-gray-800 dark:bg-gray-900 ${
           sidebarCollapsed ? 'w-[68px]' : 'w-64'
@@ -152,6 +166,20 @@ const AppLayout = () => {
                 <X size={18} />
               </button>
             </div>
+
+            {/* Mobile search entry point — opens the same command palette */}
+            <div className="px-4 pt-3">
+              <button
+                onClick={() => {
+                  setMobileOpen(false);
+                  setTimeout(openCommandPalette, 150);
+                }}
+                className="flex w-full items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-400 dark:border-gray-700"
+              >
+                <Search size={15} /> Search members, pages...
+              </button>
+            </div>
+
             <div className="flex flex-1 flex-col pt-2">
               <nav className="flex-1 space-y-0.5 px-3 pt-2">
                 {visibleItems.map(({ to, label, icon: Icon }) => (
@@ -195,6 +223,18 @@ const AppLayout = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Desktop search trigger — the real shortcut works from anywhere regardless */}
+            <button
+              onClick={openCommandPalette}
+              className="hidden items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-400 transition hover:bg-gray-50 hover:text-gray-600 dark:border-gray-700 dark:hover:bg-gray-800 sm:flex"
+            >
+              <Search size={13} />
+              <span>Search</span>
+              <kbd className="rounded bg-gray-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-gray-400 dark:bg-gray-800">
+                {isMac ? '⌘K' : 'Ctrl+K'}
+              </kbd>
+            </button>
+
             <NotificationBell />
 
             <div className="relative">
