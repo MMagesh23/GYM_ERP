@@ -6,7 +6,11 @@ import { dashboardApi } from '../../services/dashboardApi';
 import { SkeletonCard } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
 import StatCard from '../../components/common/StatCard';
-import { Users, UserCheck, UserX, UserPlus, Wallet, TrendingDown, TrendingUp, Dumbbell, Clock } from 'lucide-react';
+import { formatCurrency } from '../../utils/memberHelpers';
+import {
+  Users, UserCheck, UserX, UserPlus, Wallet, TrendingDown, TrendingUp,
+  Dumbbell, Clock, CreditCard,
+} from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -23,15 +27,34 @@ import {
   CartesianGrid,
 } from 'recharts';
 
-
 const CHART_COLORS = ['#3390fa', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
-
+// Maps each widget key (as returned by the backend's `allowedWidgets` array) to
+// how it should render. Keys/labels are kept in sync with:
+//   backend/utils/dashboardWidgets.js#WIDGET_DEFS
+//   frontend/src/pages/Settings/DashboardWidgetsPanel.jsx#WIDGET_LABELS
+const WIDGET_META = {
+  totalMembers: { type: 'card', cardProps: (v) => ({ icon: Users, label: 'Total Members', value: v ?? 0, tone: 'default' }) },
+  activeMembers: { type: 'card', cardProps: (v) => ({ icon: UserCheck, label: 'Active Members', value: v ?? 0, tone: 'green' }) },
+  expiredMembers: { type: 'card', cardProps: (v) => ({ icon: UserX, label: 'Expired Members', value: v ?? 0, tone: 'red' }) },
+  newMembersThisMonth: { type: 'card', cardProps: (v) => ({ icon: UserPlus, label: 'New This Month', value: v ?? 0, tone: 'purple' }) },
+  monthlyRevenue: { type: 'card', cardProps: (v) => ({ icon: TrendingUp, label: 'Monthly Revenue', value: formatCurrency(v), tone: 'green' }) },
+  monthlyExpenses: { type: 'card', cardProps: (v) => ({ icon: TrendingDown, label: 'Monthly Expenses', value: formatCurrency(v), tone: 'red' }) },
+  netProfit: { type: 'card', cardProps: (v) => ({ icon: Wallet, label: 'Net Profit', value: formatCurrency(v), tone: (v ?? 0) >= 0 ? 'green' : 'red' }) },
+  equipmentCount: { type: 'card', cardProps: (v) => ({ icon: Dumbbell, label: 'Equipment', value: v ?? 0, tone: 'default' }) },
+  membershipsExpiringSoon: { type: 'card', cardProps: (v) => ({ icon: Clock, label: 'Expiring in 7 Days', value: v ?? 0, tone: 'amber' }) },
+  pendingPayments: { type: 'card', cardProps: (v) => ({ icon: CreditCard, label: 'Pending Payments', value: formatCurrency(v), tone: 'amber' }) },
+  revenueChart: { type: 'chart' },
+  membershipGrowthChart: { type: 'chart' },
+  profitChart: { type: 'chart' },
+  planDistributionChart: { type: 'chart' },
+};
 
 const DashboardPage = () => {
   const { user } = useSelector((state) => state.auth);
   const [summary, setSummary] = useState(null);
   const [charts, setCharts] = useState(null);
+  const [allowedWidgets, setAllowedWidgets] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +68,11 @@ const DashboardPage = () => {
       ]);
       setSummary(s.data);
       setCharts(c.data);
+      // The backend already computes exactly which widgets this user/role is
+      // allowed to see (role config intersected with their permission matrix) —
+      // use that directly instead of trying to reverse-engineer it from the
+      // shape of the response data.
+      setAllowedWidgets(s.allowedWidgets || []);
     } catch (err) {
       const message = err.response?.data?.message || 'Failed to load dashboard';
       setError(message);
@@ -83,8 +111,14 @@ const DashboardPage = () => {
     );
   }
 
-  const cardKeys = Object.keys(summary || {}).filter((k) => WIDGET_META[k]?.type === 'card');
-  const hasAnyWidget = cardKeys.length > 0 || Object.keys(charts || {}).some((k) => WIDGET_META[k]?.type === 'chart');
+  const cardKeys = allowedWidgets.filter((k) => WIDGET_META[k]?.type === 'card' && summary && k in summary);
+  const chartKeys = allowedWidgets.filter((k) => WIDGET_META[k]?.type === 'chart');
+  const hasAnyWidget = cardKeys.length > 0 || chartKeys.length > 0;
+
+  const revenueData = charts?.revenueByMonth || [];
+  const membershipGrowthData = charts?.membershipGrowth || [];
+  const profitData = charts?.profitByMonth || [];
+  const planDistributionData = charts?.planDistribution || [];
 
   return (
     <div className="p-6">
@@ -99,71 +133,94 @@ const DashboardPage = () => {
         />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            {cardKeys.map((key) => (
-              <StatCard key={key} {...WIDGET_META[key].cardProps(summary[key])} />
-            ))}
-          </div>
-          {charts && (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Revenue ({charts.year})</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={charts.revenueByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                    <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
-                    <YAxis fontSize={12} stroke="#9ca3af" />
-                    <Tooltip formatter={(v) => currency(v)} />
-                    <Line type="monotone" dataKey="total" stroke="#3390fa" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Growth ({charts.year})</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={charts.membershipGrowth}>
-                    <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
-                    <YAxis fontSize={12} stroke="#9ca3af" allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Profit Analysis ({charts.year})</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={charts.profitByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                    <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
-                    <YAxis fontSize={12} stroke="#9ca3af" />
-                    <Tooltip formatter={(v) => currency(v)} />
-                    <Line type="monotone" dataKey="profit" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Type Distribution</h3>
-                {charts.planDistribution.length === 0 ? (
-                  <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No active memberships yet</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={charts.planDistribution} dataKey="count" nameKey="plan" cx="50%" cy="50%" outerRadius={80} label>
-                        {charts.planDistribution.map((entry, idx) => (
-                          <Cell key={entry.plan} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+          {cardKeys.length > 0 && (
+            <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              {cardKeys.map((key) => (
+                <StatCard key={key} {...WIDGET_META[key].cardProps(summary[key])} />
+              ))}
             </div>
-          )}          
+          )}
+
+          {chartKeys.length > 0 && charts && (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {chartKeys.includes('revenueChart') && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Revenue ({charts.year})</h3>
+                  {revenueData.length === 0 ? (
+                    <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No revenue data yet</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={revenueData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                        <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
+                        <YAxis fontSize={12} stroke="#9ca3af" />
+                        <Tooltip formatter={(v) => formatCurrency(v)} />
+                        <Line type="monotone" dataKey="total" stroke="#3390fa" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )}
+
+              {chartKeys.includes('membershipGrowthChart') && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Growth ({charts.year})</h3>
+                  {membershipGrowthData.length === 0 ? (
+                    <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No new members yet this year</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={membershipGrowthData}>
+                        <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
+                        <YAxis fontSize={12} stroke="#9ca3af" allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )}
+
+              {chartKeys.includes('profitChart') && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Profit Analysis ({charts.year})</h3>
+                  {profitData.length === 0 ? (
+                    <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No profit data yet</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={profitData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                        <XAxis dataKey="month" fontSize={12} stroke="#9ca3af" />
+                        <YAxis fontSize={12} stroke="#9ca3af" />
+                        <Tooltip formatter={(v) => formatCurrency(v)} />
+                        <Line type="monotone" dataKey="profit" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )}
+
+              {chartKeys.includes('planDistributionChart') && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Type Distribution</h3>
+                  {planDistributionData.length === 0 ? (
+                    <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No active memberships yet</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie data={planDistributionData} dataKey="count" nameKey="plan" cx="50%" cy="50%" outerRadius={80} label>
+                          {planDistributionData.map((entry, idx) => (
+                            <Cell key={entry.plan} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

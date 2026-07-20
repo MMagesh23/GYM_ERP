@@ -106,25 +106,45 @@ const PlanFormModal = ({ open, onClose, onSaved, plan }) => {
             ))}
           </select>
         </div>
-        {durationType === 'custom' ? (
-          <div>
-            <label className={labelClass}>Duration (days) *</label>
-            <input type="number" className={inputClass} {...register('durationDays', { required: durationType === 'custom' })} />
-          </div>
-        ) : (
-          <div>
-            <label className={labelClass}>Price (₹) *</label>
-            <input type="number" step="0.01" className={inputClass} {...register('price', { required: 'Price is required' })} />
-            {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price.message}</p>}
-          </div>
-        )}
+
+        {/* Only shown for custom-duration plans — standard duration types
+            (monthly, annual, etc.) have their durationDays computed server-side
+            from a fixed lookup, see backend/controllers/membershipPlanController.js#DURATION_DAYS */}
         {durationType === 'custom' && (
           <div>
-            <label className={labelClass}>Price (₹) *</label>
-            <input type="number" step="0.01" className={inputClass} {...register('price', { required: 'Price is required' })} />
-            {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price.message}</p>}
+            <label className={labelClass}>Duration (days) *</label>
+            <input
+              type="number"
+              className={inputClass}
+              {...register('durationDays', {
+                required: durationType === 'custom' ? 'Duration is required for a custom plan' : false,
+                min: { value: 1, message: 'Must be at least 1 day' },
+              })}
+            />
+            {errors.durationDays && <p className="mt-1 text-xs text-red-500">{errors.durationDays.message}</p>}
           </div>
         )}
+
+        {/* FIX: Price used to be duplicated across two separate conditional
+            branches (one rendered when durationType !== 'custom', a second,
+            near-identical one rendered when it === 'custom') — same field,
+            same register() call, same validation, just copy-pasted. Collapsed
+            into a single field that's always visible regardless of duration
+            type, since every plan needs a price no matter how its duration
+            is set. */}
+        <div className={durationType === 'custom' ? '' : 'sm:col-start-2'}>
+          <label className={labelClass}>Price (₹) *</label>
+          <input
+            type="number"
+            step="0.01"
+            className={inputClass}
+            {...register('price', {
+              required: 'Price is required',
+              min: { value: 0, message: 'Price cannot be negative' },
+            })}
+          />
+          {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price.message}</p>}
+        </div>
 
         <div>
           <label className={labelClass}>Joining Fee (₹)</label>

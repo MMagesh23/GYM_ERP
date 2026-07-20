@@ -12,7 +12,14 @@ import RolesPanel from './RolesPanel';
 import OverviewPanel from './OverviewPanel';
 import DashboardWidgetsPanel from './DashboardWidgetsPanel';
 
-const TABS = ['Overview', 'General', 'Branding', 'Invoicing', 'Business Hours', 'Roles & Permissions', 'Features', 'Security'];
+const TABS = [
+  'Overview', 'General', 'Branding', 'Invoicing', 'Business Hours',
+  'Dashboard Widgets', 'Roles & Permissions', 'Features', 'Security',
+];
+
+// Tabs that render their own self-contained panel (with its own save button)
+// instead of the shared form at the bottom of this page.
+const STANDALONE_TABS = ['Overview', 'Roles & Permissions', 'Business Hours', 'Dashboard Widgets'];
 
 const SettingsPage = () => {
   const [tab, setTab] = useState('Overview');
@@ -84,9 +91,11 @@ const SettingsPage = () => {
         <BusinessHoursPanel initial={settings.businessHours} onSaved={(updated) => setSettings(updated)} />
       )}
 
-      <DashboardWidgetsPanel initial={settings.dashboardWidgets} onSaved={setSettings} />
+      {tab === 'Dashboard Widgets' && (
+        <DashboardWidgetsPanel initial={settings.dashboardWidgets} onSaved={setSettings} />
+      )}
 
-      {tab !== 'Overview' && tab !== 'Roles & Permissions' && tab !== 'Business Hours' && (
+      {!STANDALONE_TABS.includes(tab) && (
         <form onSubmit={handleSubmit(onSubmit)}>
           {tab === 'General' && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
