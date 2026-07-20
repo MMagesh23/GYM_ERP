@@ -26,9 +26,13 @@ const membershipSchema = new mongoose.Schema(
     freezeHistory: [
       {
         from: Date,
-        to: Date,
+        to: Date, // originally-reserved end of the freeze
         reason: String,
-        daysUsed: Number,
+        daysUsed: Number, // requested days at freeze time; reduced on early unfreeze
+        // FIX: when the member actually unfroze, if earlier than `to`. Presence of
+        // this field (vs. undefined) is how unfreezeMembership() knows a given
+        // freeze entry has already been settled, so it doesn't double-adjust.
+        actualTo: Date,
       },
     ],
 

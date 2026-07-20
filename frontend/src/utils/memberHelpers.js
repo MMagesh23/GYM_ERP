@@ -67,7 +67,7 @@ export const formatDate = (dateStr, options = { day: '2-digit', month: 'short', 
   dateStr ? new Date(dateStr).toLocaleDateString('en-IN', options) : '—';
 
 // Mirrors backend membershipController.calcFinalAmount so the UI can preview pricing
-// before submitting. Keep in sync with backend/controllers/membershipController.js.
+// before submitting. Keep in sync with backend/utils/billing.js#calcFinalAmount.
 export const estimateFinalAmount = (plan, { isNew = false, extraDiscount = 0 } = {}) => {
   if (!plan) return 0;
   let amount = plan.price;
@@ -80,4 +80,37 @@ export const estimateFinalAmount = (plan, { isNew = false, extraDiscount = 0 } =
   amount += taxAmount;
 
   return Math.max(Math.round(amount * 100) / 100, 0);
+};
+
+/**
+ * Mirrors backend/utils/billing.js#calcPlanChangeAmount so the plan-change UI can
+ * show the real price *before* submitting, instead of the flat new-plan price.
+ *
+ * FIX: previously the UI (and the backend, before that bug was fixed) implied the
+ * member would simply keep their remaining days on the new plan for its full
+ * price — actually the backend charges a full new-plan period, credited by the
+ * unused value of the old one. This estimate must match that exactly or staff
+ * will see one number here and a different one on the resulting invoice.
+ *
+ * @param {{startDate: string|Date, endDate: string|Date, finalAmount: number}} currentMembership
+ * @param {object} newPlan - plan object with price/joiningFee/discount/discountType/tax
+ */
+export const estimatePlanChangeAmount = (currentMembership, newPlan) => {
+  if (!currentMembership || !newPlan) return null;
+
+  const now = Date.now();
+  const endMs = new Date(currentMembership.endDate).getTime();
+  const startMs = new Date(currentMembership.startDate).getTime();
+
+  const remainingMs = Math.max(endMs - now, 0);
+  const remainingDays = Math.ceil(remainingMs / 86400000);
+
+  const actualPeriodDays = Math.max(Math.round((endMs - startMs) / 86400000), 1);
+  const oldPlanDailyRate = currentMembership.finalAmount / actualPeriodDays;
+  const unusedCredit = Math.round(oldPlanDailyRate * remainingDays * 100) / 100;
+
+  const newPlanCost = estimateFinalAmount(newPlan, { isNew: false });
+  const amountDue = Math.max(Math.round((newPlanCost - unusedCredit) * 100) / 100, 0);
+
+  return { remainingDays, unusedCredit, newPlanCost, amountDue };
 };

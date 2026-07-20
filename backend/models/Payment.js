@@ -10,7 +10,16 @@ const paymentSchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     discount: { type: Number, default: 0 },
     tax: { type: Number, default: 0 },
-    finalAmount: { type: Number, required: true },
+    finalAmount: { type: Number, required: true }, // what was invoiced / owed
+
+    // FIX: tracks what was ACTUALLY collected, separate from finalAmount (what was
+    // owed). Needed so refunds can never exceed real collected money, and so
+    // revenue/pending-balance reporting reflects reality for 'partial' payments —
+    // previously a partial payment's collected amount was indistinguishable from
+    // a fully-paid one anywhere in the system.
+    // Semantics: 'paid' => equals finalAmount; 'pending'/'failed' => 0;
+    // 'partial' => must be > 0 and < finalAmount (enforced in paymentController).
+    amountPaid: { type: Number, default: 0 },
 
     paymentMethod: {
       type: String,
@@ -20,9 +29,6 @@ const paymentSchema = new mongoose.Schema(
     transactionNumber: { type: String, default: '' },
     paymentDate: { type: Date, default: Date.now },
 
-    // FIX: added 'partially_refunded' — a payment refunded less than in full
-    // previously had no way to record that distinctly from a fully-paid, never
-    // refunded payment. See paymentController.refundPayment.
     status: {
       type: String,
       enum: ['paid', 'pending', 'partial', 'refunded', 'partially_refunded', 'failed'],

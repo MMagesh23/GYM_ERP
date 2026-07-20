@@ -20,8 +20,8 @@ const METHODS = [
   { value: 'wallet', label: 'Wallet', icon: Wallet },
 ];
 
-// 'refunded' is intentionally excluded - it's a terminal state only reachable
-// via the refund flow, never set at creation time.
+// 'refunded' / 'partially_refunded' are intentionally excluded - those are
+// terminal states only reachable via the refund flow, never at creation time.
 const STATUSES = [
   { value: 'paid', label: 'Paid', icon: CheckCircle2, tone: 'green' },
   { value: 'pending', label: 'Pending', icon: Clock, tone: 'amber' },
@@ -58,13 +58,14 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
     setValue,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm({ defaultValues: { amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid' } });
+  } = useForm({ defaultValues: { amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid', amountPaid: '' } });
 
   const amount = Number(watch('amount')) || 0;
   const discount = Number(watch('discount')) || 0;
   const tax = Number(watch('tax')) || 0;
   const paymentMethod = watch('paymentMethod');
   const status = watch('status');
+  const amountPaid = Number(watch('amountPaid')) || 0;
 
   const total = useMemo(() => {
     const t = Math.max(amount - discount, 0) + tax;
@@ -76,7 +77,7 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
       setSelectedMember(null);
       setActiveMembership(null);
       setPendingForMember([]);
-      reset({ amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid' });
+      reset({ amount: '', discount: 0, tax: 0, paymentMethod: 'cash', status: 'paid', amountPaid: '' });
     }
   }, [open, reset]);
 
@@ -89,13 +90,17 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
       }
       setLoadingMemberContext(true);
       try {
-        const [{ data: memberRes }, { data: pendingRes }] = await Promise.all([
+        // FIX: previously only checked for 'pending' payments when warning about
+        // possible duplicate charges. A 'partial' payment also has an outstanding
+        // balance and deserves the same warning.
+        const [{ data: memberRes }, { data: pendingRes }, { data: partialRes }] = await Promise.all([
           memberApi.get(selectedMember._id),
           paymentApi.list({ memberId: selectedMember._id, status: 'pending', limit: 5 }),
+          paymentApi.list({ memberId: selectedMember._id, status: 'partial', limit: 5 }),
         ]);
         const membership = memberRes.data.currentMembership;
         setActiveMembership(membership || null);
-        setPendingForMember(pendingRes.data || []);
+        setPendingForMember([...(pendingRes.data || []), ...(partialRes.data || [])]);
         if (membership) {
           setValue('amount', membership.finalAmount);
         }
@@ -114,6 +119,7 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
     setValue('discount', 0);
     setValue('tax', 0);
     setValue('status', 'paid');
+    setValue('amountPaid', '');
   };
 
   const onSubmit = async (data) => {
@@ -130,6 +136,10 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
         tax: Number(data.tax || 0),
         paymentMethod: data.paymentMethod,
         status: data.status,
+        // FIX: partial payments must record how much was actually collected —
+        // this is what refunds, revenue totals, and pending-balance figures are
+        // now computed from (see backend/models/Payment.js#amountPaid).
+        amountPaid: data.status === 'partial' ? Number(data.amountPaid) : undefined,
         transactionNumber: data.transactionNumber,
         notes: data.notes,
       });
@@ -145,7 +155,7 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
     'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800';
   const labelClass = 'mb-1 block text-sm font-medium';
 
-  const pendingTotal = pendingForMember.reduce((sum, p) => sum + p.finalAmount, 0);
+  const pendingTotal = pendingForMember.reduce((sum, p) => sum + (p.finalAmount - (p.amountPaid || 0)), 0);
 
   return (
     <Modal open={open} onClose={onClose} title="Record Payment" size="lg">
@@ -163,8 +173,9 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>
-              This member already has {pendingForMember.length} pending payment{pendingForMember.length > 1 ? 's' : ''}{' '}
-              totaling <strong>{formatCurrency(pendingTotal)}</strong>. Double-check this isn't a duplicate before continuing.
+              This member already has {pendingForMember.length} payment{pendingForMember.length > 1 ? 's' : ''} with an
+              outstanding balance totaling <strong>{formatCurrency(pendingTotal)}</strong>. Double-check this isn't a
+              duplicate before continuing.
             </span>
           </div>
         )}
@@ -276,11 +287,35 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
           {status !== 'paid' && (
             <p className="mt-1.5 text-xs text-gray-400">
               {status === 'pending' && "Nothing has been collected yet — this shows up under Pending Payments."}
-              {status === 'partial' && 'Only part of the total above has been collected so far.'}
+              {status === 'partial' && 'Only part of the total above has been collected so far — enter exactly how much below.'}
               {status === 'failed' && 'The transaction did not go through — kept for the record.'}
             </p>
           )}
         </div>
+
+        {/* FIX: partial payments now require an explicit collected amount, which is
+            what refunds and revenue reporting are computed from — previously a
+            partial payment's "amount collected" was indistinguishable from a fully
+            paid one anywhere in the system. */}
+        {status === 'partial' && (
+          <div>
+            <label className={labelClass}>Amount Collected Now *</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              {...register('amountPaid', {
+                required: 'Enter how much was actually collected',
+                min: { value: 0.01, message: 'Must be greater than 0' },
+                validate: (v) => Number(v) < total || `Must be less than the total (${formatCurrency(total)}) — use "Paid" if collecting in full`,
+              })}
+            />
+            {errors.amountPaid && <p className="mt-1 text-xs text-red-500">{errors.amountPaid.message}</p>}
+            <p className="mt-1 text-xs text-gray-400">
+              Outstanding after this payment: {formatCurrency(Math.max(total - amountPaid, 0))}
+            </p>
+          </div>
+        )}
 
         <div>
           <label className={labelClass}>Transaction Reference</label>
@@ -305,7 +340,11 @@ const RecordPaymentModal = ({ open, onClose, onSaved }) => {
             disabled={isSubmitting}
             className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
           >
-            {isSubmitting ? 'Recording...' : `Record ${formatCurrency(total)} payment`}
+            {isSubmitting
+              ? 'Recording...'
+              : status === 'partial'
+              ? `Record ${formatCurrency(amountPaid)} of ${formatCurrency(total)}`
+              : `Record ${formatCurrency(total)} payment`}
           </button>
         </div>
       </form>

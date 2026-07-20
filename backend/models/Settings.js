@@ -62,6 +62,26 @@ const settingsSchema = new mongoose.Schema(
       // requireMfaForAdmin removed — no MFA implementation exists; a toggle with
       // no effect is worse than no toggle, since an admin could believe it's enforced.
     },
+    // add inside settingsSchema, alongside `features`
+    dashboardWidgets: {
+      admin: {
+        type: [String],
+        default: [
+          'totalMembers', 'activeMembers', 'expiredMembers', 'newMembersThisMonth',
+          'monthlyRevenue', 'monthlyExpenses', 'netProfit', 'equipmentCount',
+          'membershipsExpiringSoon', 'pendingPayments',
+          'revenueChart', 'membershipGrowthChart', 'profitChart', 'planDistributionChart',
+        ],
+      },
+      receptionist: {
+        type: [String],
+        default: [
+          'totalMembers', 'activeMembers', 'newMembersThisMonth',
+          'membershipsExpiringSoon', 'pendingPayments',
+          'membershipGrowthChart', 'planDistributionChart',
+        ],
+      },
+    },
 
     // Social / online presence (optional but common ask for "customizable")
     socialLinks: {

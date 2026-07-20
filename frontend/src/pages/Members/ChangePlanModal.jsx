@@ -3,12 +3,17 @@ import toast from 'react-hot-toast';
 import { ArrowUp, ArrowDown, Check } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import { planApi, membershipApi } from '../../services/membershipApi';
-import { formatCurrency } from '../../utils/memberHelpers';
+import { formatCurrency, estimatePlanChangeAmount } from '../../utils/memberHelpers';
 
 /**
  * Lets staff move a member's active membership to a different plan.
  * Direction (upgrade/downgrade) is inferred from the price difference,
  * matching the semantics the backend already expects.
+ *
+ * FIX: the price preview now mirrors the backend's real pricing
+ * (utils/billing.js#calcPlanChangeAmount) — a full new-plan period starting
+ * today, credited by the unused value of the current plan — instead of implying
+ * the member simply keeps their remaining days at the new plan's full price.
  */
 const ChangePlanModal = ({ open, onClose, onSaved, membership }) => {
   const [plans, setPlans] = useState([]);
@@ -27,6 +32,7 @@ const ChangePlanModal = ({ open, onClose, onSaved, membership }) => {
   const currentPrice = membership.plan?.price || 0;
   const selectedPlan = plans.find((p) => p._id === selectedPlanId);
   const direction = selectedPlan ? (selectedPlan.price >= currentPrice ? 'upgrade' : 'downgrade') : null;
+  const preview = selectedPlan ? estimatePlanChangeAmount(membership, selectedPlan) : null;
 
   const handleSubmit = async () => {
     if (!selectedPlanId || !direction) return;
@@ -47,7 +53,8 @@ const ChangePlanModal = ({ open, onClose, onSaved, membership }) => {
     <Modal open={open} onClose={onClose} title="Change Plan" size="lg">
       <p className="mb-4 text-sm text-gray-500">
         Currently on <span className="font-medium text-gray-900 dark:text-gray-100">{membership.plan?.name}</span> at{' '}
-        {formatCurrency(currentPrice)}. The remaining days on the current plan carry over to the new one.
+        {formatCurrency(currentPrice)}. Switching starts a full new period today; unused value from the current
+        plan is credited toward the new price.
       </p>
 
       {plans.length === 0 ? (
@@ -89,6 +96,26 @@ const ChangePlanModal = ({ open, onClose, onSaved, membership }) => {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {preview && (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-800 dark:bg-gray-800/50">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Price breakdown</p>
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-500">New plan price</span>
+              <span>{formatCurrency(preview.newPlanCost)}</span>
+            </div>
+            <div className="flex justify-between text-green-600 dark:text-green-400">
+              <span>Credit for {preview.remainingDays} unused day{preview.remainingDays === 1 ? '' : 's'}</span>
+              <span>-{formatCurrency(preview.unusedCredit)}</span>
+            </div>
+            <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-semibold dark:border-gray-700">
+              <span>Amount due</span>
+              <span className="text-brand-600 dark:text-brand-400">{formatCurrency(preview.amountDue)}</span>
+            </div>
+          </div>
         </div>
       )}
 

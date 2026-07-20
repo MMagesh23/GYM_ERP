@@ -8,8 +8,9 @@ const {
   DAY_MS,
   calcFinalAmount,
   calcRenewalWindow,
-  calcProratedChangeWindow,
+  calcPlanChangeAmount,
   calcFreezeExtension,
+  calcUnfreezeAdjustment,
 } = require('../utils/billing');
 
 // @desc  Start a brand-new membership for a member
@@ -18,15 +19,20 @@ const {
 const createMembership = asyncHandler(async (req, res) => {
   const { memberId, planId, startDate, extraDiscount } = req.body;
 
+  // FIX: extraDiscount subtracts from the price with no floor of its own —
+  // calcFinalAmount clamps the FINAL result at 0, but a negative extraDiscount
+  // would silently INCREASE the price above the plan's own price, which is never
+  // a legitimate use of a "discount" field.
+  if (extraDiscount !== undefined && Number(extraDiscount) < 0) {
+    throw new ApiError(400, 'extraDiscount cannot be negative.');
+  }
+
   const [member, plan] = await Promise.all([Member.findById(memberId), MembershipPlan.findById(planId)]);
   if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
   if (!plan || !plan.isActive) throw new ApiError(404, 'Membership plan not found or inactive.');
 
-  // FIX: previously this created a brand-new membership unconditionally, silently
-  // orphaning any existing active/frozen membership — member.currentMembership would
-  // just get repointed while the old record was left with status: 'active' forever,
-  // never reconciled. A member must not accidentally end up with two live memberships.
-  // Renew / change-plan / cancel are the correct paths once one already exists.
+  // A member must not accidentally end up with two live memberships — this guards
+  // against silently orphaning an existing active/frozen membership.
   const existing = await Membership.findOne({ member: member._id, status: { $in: ['active', 'frozen'] } });
   if (existing) {
     throw new ApiError(
@@ -54,11 +60,15 @@ const createMembership = asyncHandler(async (req, res) => {
   member.status = 'active';
   await member.save();
 
+  // FIX: a discretionary discount is a financially material override with zero
+  // prior audit trail — now recorded explicitly.
   await logAudit(req, {
     action: 'create',
     module: 'memberships',
     targetId: membership._id,
-    description: `New membership (${plan.name}) started for ${member.memberId}`,
+    description:
+      `New membership (${plan.name}) started for ${member.memberId}` +
+      (Number(extraDiscount) > 0 ? ` with a discretionary discount of ${Number(extraDiscount).toFixed(2)}` : ''),
   });
 
   res.status(201).json({ success: true, data: membership });
@@ -70,11 +80,9 @@ const renewMembership = asyncHandler(async (req, res) => {
   const current = await Membership.findById(req.params.id).populate('plan');
   if (!current) throw new ApiError(404, 'Membership not found.');
 
-  // FIX: unlike freezeMembership/changePlan, this had no status guard at all — a
-  // frozen or already-cancelled membership record could be "renewed", producing a
-  // new active membership chained off a non-active parent while the frozen one sat
-  // there unresolved. Renewal is only valid from an active membership (the normal
-  // case) or an expired one still within reach (grace-period renewal).
+  // Renewal is only valid from an active membership (the normal case) or an
+  // expired one still within reach (grace-period renewal) — a frozen or
+  // already-cancelled membership must not be "renewed".
   if (!['active', 'expired'].includes(current.status)) {
     throw new ApiError(400, `Cannot renew a membership with status "${current.status}".`);
   }
@@ -119,6 +127,14 @@ const renewMembership = asyncHandler(async (req, res) => {
 // @desc  Upgrade or downgrade to a different plan, effective immediately
 // @route POST /api/memberships/:id/change-plan
 // body: { newPlanId, direction: 'upgrade' | 'downgrade' }
+//
+// FIX (overcharge bug): this previously kept the OLD plan's remaining days as the
+// ENTIRE new membership window while charging the FULL new-plan price for it — e.g.
+// a member with 10 days left on a ₹900/30-day plan upgrading to a ₹36,000/365-day
+// plan was charged the full ₹36,000 for only 10 more days. Now: the new membership
+// gets a full new-plan duration starting today, and the price charged is the new
+// plan's cost minus a credit for the unused value of the old plan (see
+// utils/billing.js#calcPlanChangeAmount).
 const changePlan = asyncHandler(async (req, res) => {
   const { newPlanId, direction } = req.body;
   if (!['upgrade', 'downgrade'].includes(direction)) {
@@ -132,10 +148,8 @@ const changePlan = asyncHandler(async (req, res) => {
   const newPlan = await MembershipPlan.findById(newPlanId);
   if (!newPlan || !newPlan.isActive) throw new ApiError(404, 'Target plan not found or inactive.');
 
-  // Pro-rate the switch: remaining whole days on the old plan carry over as-is to the
-  // new plan (see utils/billing.js#calcProratedChangeWindow).
   const now = new Date();
-  const { end: newEnd } = calcProratedChangeWindow(current, now);
+  const { end: newEnd, amountDue, unusedCredit, remainingDays } = calcPlanChangeAmount(current, newPlan, now);
 
   const changed = await Membership.create({
     member: current.member,
@@ -145,7 +159,7 @@ const changePlan = asyncHandler(async (req, res) => {
     status: 'active',
     type: direction,
     previousMembership: current._id,
-    finalAmount: calcFinalAmount(newPlan, { isNew: false }),
+    finalAmount: amountDue,
     createdBy: req.user._id,
   });
 
@@ -158,7 +172,9 @@ const changePlan = asyncHandler(async (req, res) => {
     action: 'update',
     module: 'memberships',
     targetId: changed._id,
-    description: `Membership ${direction}d from "${current.plan.name}" to "${newPlan.name}"`,
+    description:
+      `Membership ${direction}d from "${current.plan.name}" to "${newPlan.name}" — ` +
+      `${remainingDays} unused day(s) credited (${unusedCredit.toFixed(2)}), ${amountDue.toFixed(2)} charged`,
   });
 
   res.status(201).json({ success: true, data: changed });
@@ -179,7 +195,7 @@ const transferMembership = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Cannot transfer a membership to the same member it already belongs to.');
   }
 
-  // FIX: same active-membership-orphaning bug as createMembership, but on the
+  // Same active-membership-orphaning guard as createMembership, but on the
   // receiving member — a transfer must not silently bury their existing membership.
   const receiverExisting = await Membership.findOne({ member: toMember._id, status: { $in: ['active', 'frozen'] } });
   if (receiverExisting) {
@@ -235,8 +251,6 @@ const freezeMembership = asyncHandler(async (req, res) => {
   if (membership.status !== 'active') throw new ApiError(400, 'Only an active membership can be frozen.');
   if (!membership.plan.freezeAllowed) throw new ApiError(400, 'This plan does not allow freezing.');
 
-  // Validates the requested freeze against the plan's freeze-day allowance and computes
-  // the new end date — see utils/billing.js#calcFreezeExtension.
   const result = calcFreezeExtension(membership, membership.plan, Number(days));
   if (!result.valid) throw new ApiError(400, result.message);
 
@@ -262,17 +276,44 @@ const freezeMembership = asyncHandler(async (req, res) => {
 
 // @desc  Unfreeze a membership, resuming active status
 // @route POST /api/memberships/:id/unfreeze
+//
+// FIX (free-days bug): freezing extended endDate by the full requested days
+// immediately, and this endpoint never adjusted anything back — so a member could
+// request the max freeze allowance, unfreeze the next day, and permanently keep
+// the whole extension. Now: if the member unfreezes before using the full
+// requested freeze period, the unused portion of the extension is clawed back
+// from endDate, and the freeze-allowance ledger (daysUsed) is reduced to match
+// what was actually used — see utils/billing.js#calcUnfreezeAdjustment.
 const unfreezeMembership = asyncHandler(async (req, res) => {
   const membership = await Membership.findById(req.params.id);
   if (!membership) throw new ApiError(404, 'Membership not found.');
   if (membership.status !== 'frozen') throw new ApiError(400, 'Membership is not currently frozen.');
+
+  const lastFreeze = membership.freezeHistory[membership.freezeHistory.length - 1];
+  let clawbackNote = '';
+
+  if (lastFreeze && !lastFreeze.actualTo) {
+    const now = new Date();
+    const { newEndDate, adjustedDaysUsed, unusedDaysClawedBack } = calcUnfreezeAdjustment(lastFreeze, membership.endDate, now);
+    if (unusedDaysClawedBack > 0) {
+      membership.endDate = newEndDate;
+      lastFreeze.daysUsed = adjustedDaysUsed;
+      clawbackNote = ` (returned early — ${unusedDaysClawedBack} unused freeze day(s) credited back to the plan allowance)`;
+    }
+    lastFreeze.actualTo = now;
+  }
 
   membership.status = 'active';
   await membership.save();
 
   await Member.findByIdAndUpdate(membership.member, { status: 'active' });
 
-  await logAudit(req, { action: 'update', module: 'memberships', targetId: membership._id, description: 'Membership unfrozen' });
+  await logAudit(req, {
+    action: 'update',
+    module: 'memberships',
+    targetId: membership._id,
+    description: `Membership unfrozen${clawbackNote}`,
+  });
 
   res.json({ success: true, data: membership });
 });

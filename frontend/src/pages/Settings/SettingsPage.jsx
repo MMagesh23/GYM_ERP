@@ -10,6 +10,7 @@ import SessionsPanel from './SessionsPanel';
 import BusinessHoursPanel from './BusinessHoursPanel';
 import RolesPanel from './RolesPanel';
 import OverviewPanel from './OverviewPanel';
+import DashboardWidgetsPanel from './DashboardWidgetsPanel';
 
 const TABS = ['Overview', 'General', 'Branding', 'Invoicing', 'Business Hours', 'Roles & Permissions', 'Features', 'Security'];
 
@@ -82,6 +83,8 @@ const SettingsPage = () => {
       {tab === 'Business Hours' && (
         <BusinessHoursPanel initial={settings.businessHours} onSaved={(updated) => setSettings(updated)} />
       )}
+
+      <DashboardWidgetsPanel initial={settings.dashboardWidgets} onSaved={setSettings} />
 
       {tab !== 'Overview' && tab !== 'Roles & Permissions' && tab !== 'Business Hours' && (
         <form onSubmit={handleSubmit(onSubmit)}>

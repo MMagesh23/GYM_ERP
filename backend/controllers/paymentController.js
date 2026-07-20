@@ -10,12 +10,15 @@ const logAudit = require('../utils/logAudit');
 const { generateEntityId } = require('../utils/idGenerator');
 const { streamInvoicePdf } = require('../utils/generateInvoicePdf');
 const { validateRefundAmount } = require('../utils/billing');
+const { buildSort } = require('../utils/sorting');
+
+const PAYMENT_SORT_FIELDS = ['paymentDate', 'finalAmount', 'status'];
 
 // @desc  Record a new payment (optionally linked to a membership) and generate its invoice
 // @route POST /api/payments
-// body: { memberId, membershipId?, amount, discount?, tax?, paymentMethod, transactionNumber?, status?, notes? }
+// body: { memberId, membershipId?, amount, discount?, tax?, paymentMethod, transactionNumber?, status?, amountPaid?, notes? }
 const createPayment = asyncHandler(async (req, res) => {
-  const { memberId, membershipId, amount, discount = 0, tax = 0, paymentMethod, transactionNumber, status, notes } = req.body;
+  const { memberId, membershipId, amount, discount = 0, tax = 0, paymentMethod, transactionNumber, status, notes, amountPaid } = req.body;
 
   const member = await Member.findById(memberId);
   if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
@@ -24,16 +27,42 @@ const createPayment = asyncHandler(async (req, res) => {
   if (membershipId) {
     membership = await Membership.findById(membershipId).populate('plan');
     if (!membership) throw new ApiError(404, 'Membership not found.');
-    // FIX: previously nothing verified this membership actually belongs to the
-    // member being billed. A caller could send memberId=A + membershipId=<B's
-    // membership> and the payment/invoice would be created against A while
-    // referencing B's membership record — a real cross-member data-integrity hole.
+    // Verify this membership actually belongs to the member being billed — a
+    // caller sending memberId=A + membershipId=<B's membership> must not be able
+    // to create a payment/invoice against A that references B's membership record.
     if (String(membership.member) !== String(member._id)) {
       throw new ApiError(400, 'This membership does not belong to the selected member.');
     }
   }
 
   const finalAmount = Math.round((Number(amount) - Number(discount) + Number(tax)) * 100) / 100;
+  const resolvedStatus = status || 'paid';
+
+  // FIX: amountPaid tracks what was ACTUALLY collected, independent of finalAmount
+  // (what was invoiced). Without this, a 'partial' payment's collected amount was
+  // indistinguishable from a fully-paid one anywhere downstream (refunds, revenue
+  // reporting, pending-balance totals).
+  let resolvedAmountPaid;
+  if (resolvedStatus === 'paid') {
+    resolvedAmountPaid = finalAmount;
+  } else if (resolvedStatus === 'pending' || resolvedStatus === 'failed') {
+    resolvedAmountPaid = 0;
+  } else if (resolvedStatus === 'partial') {
+    if (amountPaid === undefined || amountPaid === null || amountPaid === '') {
+      throw new ApiError(400, 'amountPaid is required when status is "partial".');
+    }
+    resolvedAmountPaid = Number(amountPaid);
+    if (!(resolvedAmountPaid > 0) || resolvedAmountPaid >= finalAmount) {
+      throw new ApiError(
+        400,
+        'For a partial payment, amountPaid must be greater than 0 and less than the total due. ' +
+          'Use "paid" if collecting in full, or "pending" if nothing was collected yet.'
+      );
+    }
+  } else {
+    resolvedAmountPaid = 0;
+  }
+
   const invoiceNumber = await generateEntityId('invoiceNumber', 'INV', 5);
 
   const payment = await Payment.create({
@@ -44,9 +73,10 @@ const createPayment = asyncHandler(async (req, res) => {
     discount: Number(discount),
     tax: Number(tax),
     finalAmount,
+    amountPaid: resolvedAmountPaid,
     paymentMethod,
     transactionNumber,
-    status: status || 'paid',
+    status: resolvedStatus,
     notes,
     receivedBy: req.user._id,
   });
@@ -83,18 +113,22 @@ const createPayment = asyncHandler(async (req, res) => {
     action: 'payment',
     module: 'payments',
     targetId: payment._id,
-    description: `Recorded payment ${invoiceNumber} for member ${member.memberId} (${finalAmount})`,
+    description:
+      `Recorded payment ${invoiceNumber} for member ${member.memberId} (${finalAmount})` +
+      (resolvedStatus === 'partial'
+        ? ` — ${resolvedAmountPaid} collected, ${(finalAmount - resolvedAmountPaid).toFixed(2)} outstanding`
+        : ''),
   });
 
   res.status(201).json({ success: true, data: payment });
 });
 
-// @desc  List payments with filters and pagination
-// @route GET /api/payments?page=&limit=&status=&method=&memberId=&from=&to=
+// @desc  List payments with filters, sorting, and pagination
+// @route GET /api/payments?page=&limit=&status=&method=&memberId=&from=&to=&sortBy=&sortDir=
 const listPayments = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.min(Number(req.query.limit) || 20, 100);
-  const { status, method, memberId, from, to } = req.query;
+  const { status, method, memberId, from, to, sortBy, sortDir } = req.query;
 
   const filter = {};
   if (status) filter.status = status;
@@ -106,11 +140,13 @@ const listPayments = asyncHandler(async (req, res) => {
     if (to) filter.paymentDate.$lte = new Date(to);
   }
 
+  const sort = buildSort(sortBy, sortDir, PAYMENT_SORT_FIELDS, { paymentDate: -1 });
+
   const [payments, total] = await Promise.all([
     Payment.find(filter)
       .populate('member', 'memberId firstName lastName phone')
       .populate({ path: 'membership', populate: { path: 'plan', select: 'name' } })
-      .sort({ paymentDate: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit),
     Payment.countDocuments(filter),
@@ -175,8 +211,13 @@ const downloadInvoice = asyncHandler(async (req, res) => {
 // @desc  Refund a payment (full or partial)
 // @route POST /api/payments/:id/refund
 // body: { amount, reason }
+//
+// FIX: previously capped the refund against finalAmount (invoiced total), not what
+// was actually collected — a partially-paid or even a pending/failed payment could
+// be "refunded" for more money than the gym ever received. Now capped against
+// amountPaid and blocked entirely for statuses where nothing was collected.
 const refundPayment = asyncHandler(async (req, res) => {
-   const { amount, reason } = req.body;
+  const { amount, reason } = req.body;
   const payment = await Payment.findById(req.params.id);
   if (!payment) throw new ApiError(404, 'Payment not found.');
 
@@ -188,12 +229,10 @@ const refundPayment = asyncHandler(async (req, res) => {
   payment.refund.refundedAmount = (payment.refund.refundedAmount || 0) + refundAmount;
   payment.refund.refundDate = new Date();
   payment.refund.reason = reason || '';
-  // FIX: a payment refunded less than in full silently stayed status: 'paid',
-  // which is misleading — the payments list showed a green "Paid" badge on a
-  // payment that had actually had money returned against it. Distinguish
-  // partially_refunded from fully refunded so the UI reflects reality.
+
+  const collected = payment.amountPaid ?? payment.finalAmount;
   payment.status =
-    payment.refund.refundedAmount >= payment.finalAmount
+    payment.refund.refundedAmount >= collected
       ? 'refunded'
       : payment.refund.refundedAmount > 0
       ? 'partially_refunded'
@@ -213,12 +252,14 @@ const refundPayment = asyncHandler(async (req, res) => {
 // @desc  Export payments to Excel
 // @route GET /api/payments/export
 const exportPayments = asyncHandler(async (req, res) => {
-  const { status, method } = req.query;
+  const { status, method, sortBy, sortDir } = req.query;
   const filter = {};
   if (status) filter.status = status;
   if (method) filter.paymentMethod = method;
 
-  const payments = await Payment.find(filter).populate('member', 'memberId firstName lastName').sort({ paymentDate: -1 });
+  const sort = buildSort(sortBy, sortDir, PAYMENT_SORT_FIELDS, { paymentDate: -1 });
+
+  const payments = await Payment.find(filter).populate('member', 'memberId firstName lastName').sort(sort);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Payments');
@@ -229,11 +270,18 @@ const exportPayments = asyncHandler(async (req, res) => {
     { header: 'Discount', key: 'discount', width: 12 },
     { header: 'Tax', key: 'tax', width: 10 },
     { header: 'Final Amount', key: 'finalAmount', width: 14 },
+    // FIX: exports previously only showed the invoiced total, with no visibility
+    // into what was actually collected vs. still outstanding on partial payments,
+    // or how much of a payment had been refunded — both feed real accounting.
+    { header: 'Collected', key: 'amountPaid', width: 14 },
+    { header: 'Outstanding', key: 'outstanding', width: 14 },
+    { header: 'Refunded', key: 'refunded', width: 12 },
     { header: 'Method', key: 'paymentMethod', width: 14 },
-    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Status', key: 'status', width: 16 },
     { header: 'Date', key: 'paymentDate', width: 14 },
   ];
   payments.forEach((p) => {
+    const collected = p.amountPaid ?? p.finalAmount;
     sheet.addRow({
       invoiceNumber: p.invoiceNumber,
       member: p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '',
@@ -241,6 +289,9 @@ const exportPayments = asyncHandler(async (req, res) => {
       discount: p.discount,
       tax: p.tax,
       finalAmount: p.finalAmount,
+      amountPaid: collected,
+      outstanding: Math.max(p.finalAmount - collected, 0),
+      refunded: p.refund?.refundedAmount || 0,
       paymentMethod: p.paymentMethod,
       status: p.status,
       paymentDate: p.paymentDate.toISOString().slice(0, 10),

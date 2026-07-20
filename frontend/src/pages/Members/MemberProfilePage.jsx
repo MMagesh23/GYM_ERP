@@ -42,10 +42,6 @@ const InfoRow = ({ icon: Icon, label, value }) => (
 
 const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChangePlan, onTransfer, onCancel }) => {
   const isActive = record.status === 'active';
-  // FIX: previously only `status === 'active'` memberships showed any action
-  // buttons, which meant a frozen membership had NO way to be unfrozen from the
-  // UI — `membershipApi.unfreeze` existed in the service layer and on the backend
-  // but was completely unreachable. A frozen membership was stuck forever.
   const isFrozen = record.status === 'frozen';
 
   return (
@@ -113,7 +109,9 @@ const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChang
 
         {isFrozen && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
-            <p className="mr-1 text-xs text-gray-400">Frozen — resume to restore normal billing dates.</p>
+            <p className="mr-1 text-xs text-gray-400">
+              Frozen — resume to restore normal billing dates. Unfreezing early credits back any unused freeze days.
+            </p>
             <button
               onClick={() => onUnfreeze(record)}
               aria-label="Unfreeze membership"
@@ -187,7 +185,6 @@ const MemberProfilePage = () => {
     }
   };
 
-  // FIX: new handler wired to the previously-unreachable unfreeze endpoint.
   const handleUnfreeze = async () => {
     try {
       await membershipApi.unfreeze(unfreezeTarget._id);
@@ -216,8 +213,29 @@ const MemberProfilePage = () => {
     return Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
   }, [activeMembership]);
 
+  // FIX: previously summed `finalAmount` (invoiced total) for every non-refunded
+  // payment, which overstated "Total Paid" for any 'partial' payment (counted as
+  // if fully collected) and understated it for 'pending'/'failed' payments that
+  // should contribute 0. Now sums the actual collected amount (amountPaid,
+  // falling back to finalAmount for legacy pre-migration records) minus refunds,
+  // and explicitly skips payments where nothing was collected.
   const totalPaid = useMemo(
-    () => payments.reduce((sum, p) => sum + (p.finalAmount - (p.refund?.refundedAmount || 0)), 0),
+    () =>
+      payments.reduce((sum, p) => {
+        if (p.status === 'pending' || p.status === 'failed') return sum;
+        const collected = p.amountPaid ?? p.finalAmount;
+        return sum + collected - (p.refund?.refundedAmount || 0);
+      }, 0),
+    [payments]
+  );
+
+  const outstandingBalance = useMemo(
+    () =>
+      payments.reduce((sum, p) => {
+        if (p.status !== 'pending' && p.status !== 'partial') return sum;
+        const collected = p.amountPaid ?? 0;
+        return sum + Math.max(p.finalAmount - collected, 0);
+      }, 0),
     [payments]
   );
 
@@ -307,7 +325,12 @@ const MemberProfilePage = () => {
             <CreditCard size={13} /> Total Paid
           </p>
           <p className="text-lg font-semibold">{formatCurrency(totalPaid)}</p>
-          <p className="text-xs text-gray-400">{payments.length} payment{payments.length === 1 ? '' : 's'}</p>
+          <p className="text-xs text-gray-400">
+            {payments.length} payment{payments.length === 1 ? '' : 's'}
+            {outstandingBalance > 0 && (
+              <span className="text-amber-600 dark:text-amber-400"> · {formatCurrency(outstandingBalance)} outstanding</span>
+            )}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
@@ -426,27 +449,35 @@ const MemberProfilePage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {payments.map((p) => (
-                  <tr key={p._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                    <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
-                    <td className="px-4 py-3">{formatCurrency(p.finalAmount)}</td>
-                    <td className="px-4 py-3 capitalize">{p.paymentMethod.replace('_', ' ')}</td>
-                    <td className="px-4 py-3">{formatDate(p.paymentDate)}</td>
-                    <td className="px-4 py-3">
-                      <Badge status={p.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        title="Download invoice"
-                        aria-label="Download invoice"
-                        onClick={() => paymentApi.downloadInvoice(p._id, p.invoiceNumber)}
-                        className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                      >
-                        <FileText size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {payments.map((p) => {
+                  const outstanding = Math.max(p.finalAmount - (p.amountPaid ?? p.finalAmount), 0);
+                  return (
+                    <tr key={p._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                      <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
+                      <td className="px-4 py-3">
+                        {formatCurrency(p.finalAmount)}
+                        {p.status === 'partial' && outstanding > 0 && (
+                          <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">({formatCurrency(outstanding)} due)</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 capitalize">{p.paymentMethod.replace('_', ' ')}</td>
+                      <td className="px-4 py-3">{formatDate(p.paymentDate)}</td>
+                      <td className="px-4 py-3">
+                        <Badge status={p.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          title="Download invoice"
+                          aria-label="Download invoice"
+                          onClick={() => paymentApi.downloadInvoice(p._id, p.invoiceNumber)}
+                          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                          <FileText size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -476,11 +507,10 @@ const MemberProfilePage = () => {
         onClose={() => setCancelTarget(null)}
       />
 
-      {/* FIX: new confirm dialog wired to the previously-unreachable unfreeze action. */}
       <ConfirmDialog
         open={Boolean(unfreezeTarget)}
         title="Unfreeze membership"
-        message="Resume this membership now? It will become active again immediately."
+        message="Resume this membership now? It will become active again immediately. If you're returning before the full freeze period was used, any unused days will be credited back automatically."
         confirmLabel="Unfreeze"
         onConfirm={handleUnfreeze}
         onClose={() => setUnfreezeTarget(null)}

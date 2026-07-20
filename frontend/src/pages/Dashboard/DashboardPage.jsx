@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
-import { Users, UserCheck, UserX, UserPlus, Wallet, TrendingDown, TrendingUp, Dumbbell, Clock, AlertCircle } from 'lucide-react';
+import { AlertCircle, LayoutDashboard } from 'lucide-react';
+import { dashboardApi } from '../../services/dashboardApi';
+import { SkeletonCard } from '../../components/common/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
+import StatCard from '../../components/common/StatCard';
+import { Users, UserCheck, UserX, UserPlus, Wallet, TrendingDown, TrendingUp, Dumbbell, Clock } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -17,85 +22,88 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { dashboardApi } from '../../services/dashboardApi';
-import { SkeletonCard  } from '../../components/common/Skeleton';
+
 
 const CHART_COLORS = ['#3390fa', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
-const StatCard = ({ icon: Icon, label, value, tone = 'default' }) => {
-  const tones = {
-    default: 'text-brand-600 bg-brand-50 dark:bg-brand-900/30',
-    green: 'text-green-600 bg-green-50 dark:bg-green-900/30',
-    red: 'text-red-600 bg-red-50 dark:bg-red-900/30',
-    amber: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30',
-  };
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500">{label}</span>
-        <span className={`rounded-lg p-1.5 ${tones[tone]}`}>
-          <Icon size={16} />
-        </span>
-      </div>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-};
+
 
 const DashboardPage = () => {
   const { user } = useSelector((state) => state.auth);
   const [summary, setSummary] = useState(null);
   const [charts, setCharts] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    dashboardApi
-      .summary()
-      .then(({ data }) => setSummary(data.data))
-      .catch((err) => toast.error(err.response?.data?.message || 'Failed to load dashboard summary'));
-    dashboardApi
-      .charts(new Date().getFullYear())
-      .then(({ data }) => setCharts(data.data))
-      .catch(() => {});
-  }, []);
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [{ data: s }, { data: c }] = await Promise.all([
+        dashboardApi.summary(),
+        dashboardApi.charts(new Date().getFullYear()),
+      ]);
+      setSummary(s.data);
+      setCharts(c.data);
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to load dashboard';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const currency = (n) => `₹${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  useEffect(() => { load(); }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={AlertCircle}
+          title="Couldn't load the dashboard"
+          description={error}
+          action={
+            <button onClick={load} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              Retry
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const cardKeys = Object.keys(summary || {}).filter((k) => WIDGET_META[k]?.type === 'card');
+  const hasAnyWidget = cardKeys.length > 0 || Object.keys(charts || {}).some((k) => WIDGET_META[k]?.type === 'chart');
 
   return (
     <div className="p-6">
       <h1 className="mb-1 text-xl font-semibold">Welcome, {user?.name}</h1>
-      <p className="mb-6 text-sm text-gray-500">
-        Role: <span className="font-medium capitalize">{user?.role}</span>
-      </p>
+      <p className="mb-6 text-sm text-gray-500">Role: <span className="font-medium capitalize">{user?.role}</span></p>
 
-      {!summary ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
+      {!hasAnyWidget ? (
+        <EmptyState
+          icon={LayoutDashboard}
+          title="No dashboard widgets enabled for your role"
+          description="Ask an admin to enable some under Settings → Dashboard Widgets."
+        />
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <StatCard icon={Users} label="Total Members" value={summary.totalMembers} />
-            <StatCard icon={UserCheck} label="Active Members" value={summary.activeMembers} tone="green" />
-            <StatCard icon={UserX} label="Expired Members" value={summary.expiredMembers} tone="red" />
-            <StatCard icon={UserPlus} label="New This Month" value={summary.newMembersThisMonth} />
-            <StatCard icon={Dumbbell} label="Equipment" value={summary.equipmentCount} />
-            <StatCard icon={TrendingUp} label="Monthly Revenue" value={currency(summary.monthlyRevenue)} tone="green" />
-            <StatCard icon={TrendingDown} label="Monthly Expenses" value={currency(summary.monthlyExpenses)} tone="red" />
-            <StatCard
-              icon={Wallet}
-              label="Net Profit"
-              value={currency(summary.netProfit)}
-              tone={summary.netProfit >= 0 ? 'green' : 'red'}
-            />
-            <StatCard icon={Clock} label="Expiring Soon" value={summary.membershipsExpiringSoon} tone="amber" />
-            <StatCard
-              icon={AlertCircle}
-              label="Pending Payments"
-              value={`${summary.pendingPayments.count} (${currency(summary.pendingPayments.total)})`}
-              tone="amber"
-            />
+            {cardKeys.map((key) => (
+              <StatCard key={key} {...WIDGET_META[key].cardProps(summary[key])} />
+            ))}
           </div>
-
           {charts && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -155,7 +163,7 @@ const DashboardPage = () => {
                 )}
               </div>
             </div>
-          )}
+          )}          
         </>
       )}
     </div>

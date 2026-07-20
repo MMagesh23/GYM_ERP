@@ -1,3 +1,6 @@
+const { resolveAllowedWidgets, pickFields } = require('../utils/dashboardWidgets');
+const Settings = require('../models/Settings');
+
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
 const MembershipPlan = require('../models/MembershipPlan');
@@ -48,22 +51,26 @@ const summary = asyncHandler(async (req, res) => {
 
   const monthlyRevenue = monthlyRevenueAgg[0]?.total || 0;
   const monthlyExpenses = monthlyExpenseAgg[0]?.total || 0;
+  const pendingPayments = pendingPaymentsAgg[0]?.total || 0;
 
-  res.json({
-    success: true,
-    data: {
-      totalMembers,
-      activeMembers,
-      expiredMembers,
-      newMembersThisMonth,
-      monthlyRevenue,
-      monthlyExpenses,
-      netProfit: monthlyRevenue - monthlyExpenses,
-      equipmentCount,
-      membershipsExpiringSoon: expiringMemberships,
-      pendingPayments: { count: pendingPaymentsAgg[0]?.count || 0, total: pendingPaymentsAgg[0]?.total || 0 },
-    },
-  });
+  const summaryData = {
+    totalMembers,
+    activeMembers,
+    expiredMembers,
+    newMembersThisMonth,
+    monthlyRevenue,
+    monthlyExpenses,
+    netProfit: monthlyRevenue - monthlyExpenses,
+    equipmentCount,
+    membershipsExpiringSoon: expiringMemberships,
+    pendingPayments,
+  };
+
+  const settings = await Settings.getSingleton();
+  const allowedWidgets = await resolveAllowedWidgets(req.user, settings);
+  const filtered = pickFields(summaryData, allowedWidgets, 'summaryFields');
+
+  res.json({ success: true, data: filtered, allowedWidgets });
 });
 
 // @desc  Chart data for the dashboard (revenue, membership growth, expense/profit analysis, plan distribution)
@@ -102,19 +109,21 @@ const charts = asyncHandler(async (req, res) => {
 
   const revenue = monthly(revenueByMonth);
   const expenses = monthly(expenseByMonth);
-  const profit = revenue.map((r, i) => ({ month: r.month, profit: r.total - expenses[i].total }));
+  const profitByMonth = revenue.map((r, i) => ({ month: r.month, profit: r.total - expenses[i].total }));
 
-  res.json({
-    success: true,
-    data: {
-      year,
-      revenueByMonth: revenue,
-      expenseByMonth: expenses,
-      profitByMonth: profit,
-      membershipGrowth: monthly(membershipGrowth, 'count'),
-      planDistribution: planDistribution.map((p) => ({ plan: p._id, count: p.count })),
-    },
-  });
+  const chartData = {
+    revenueByMonth: revenue,
+    membershipGrowth: monthly(membershipGrowth, 'count'),
+    expenseByMonth: expenses,
+    profitByMonth,
+    planDistribution: planDistribution.map((item) => ({ plan: item._id, count: item.count })),
+  };
+
+  const settings = await Settings.getSingleton();
+  const allowedWidgets = await resolveAllowedWidgets(req.user, settings);
+  const filtered = pickFields({ ...chartData, year }, allowedWidgets, 'chartFields');
+
+  res.json({ success: true, data: { year, ...filtered }, allowedWidgets });
 });
 
 module.exports = { summary, charts };
