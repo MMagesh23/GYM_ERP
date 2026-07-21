@@ -18,4 +18,5 @@ export const membershipApi = {
   cancel: (id, reason) => api.post(`/memberships/${id}/cancel`, { reason }),
   expiringSoon: (days = 7) => api.get('/memberships/expiring', { params: { days } }),
   historyForMember: (memberId) => api.get(`/memberships/member/${memberId}`),
+  outstanding: () => api.get('/memberships/outstanding'),
 };

@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Download, Upload, Pencil, Trash2, Ban, RotateCcw,
-  Users, UserCheck, UserPlus, Clock, X, Snowflake,
+  Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
@@ -18,7 +18,8 @@ import MemberFormModal from './MemberFormModal';
 import PageHeader from '../../components/common/PageHeader';
 import { SkeletonTable } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
-import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES } from '../../utils/memberHelpers';
+import RecordPaymentModal from '../Payments/RecordPaymentModal';
+import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency } from '../../utils/memberHelpers';
 
 const STATUS_OPTIONS = ['active', 'expired', 'suspended', 'freeze', 'cancelled'];
 
@@ -35,7 +36,20 @@ const ExpiryChip = ({ membership }) => {
   );
 };
 
+// A membership never bills itself — assigning/renewing/changing one only records
+// the debt, nothing creates a Payment automatically. Without this, a member could
+// carry an unpaid membership for months and nothing on this list would show it.
+const DuesChip = ({ billing }) => {
+  if (!billing || !(billing.outstanding > 0)) return null;
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+      {formatCurrency(billing.outstanding)} due
+    </span>
+  );
+};
+
 const MembersPage = () => {
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const [members, setMembers] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
@@ -49,6 +63,7 @@ const MembersPage = () => {
   const [editingMember, setEditingMember] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [collectPaymentFor, setCollectPaymentFor] = useState(null);
 
   const fetchMembers = useCallback(
     async (page = 1) => {
@@ -163,6 +178,18 @@ const MembersPage = () => {
       { icon: UserCheck, label: 'Active', value: summary?.activeMembers, tone: 'green' },
       { icon: Clock, label: 'Expiring in 7 days', value: summary?.membershipsExpiringSoon, tone: 'amber' },
       { icon: UserPlus, label: 'New This Month', value: summary?.newMembersThisMonth, tone: 'purple' },
+      ...(summary?.pendingPayments > 0
+        ? [
+            {
+              icon: CreditCard,
+              label: 'Outstanding Dues',
+              value: formatCurrency(summary.pendingPayments),
+              hint: `${summary.pendingPaymentsCount || 0} membership${summary.pendingPaymentsCount === 1 ? '' : 's'}`,
+              tone: 'red',
+              onClick: () => navigate('/payments?tab=dues'),
+            },
+          ]
+        : []),
     ],
     [summary]
   );
@@ -303,12 +330,25 @@ const MembersPage = () => {
                     <td className="px-4 py-3">{m.currentMembership?.plan?.name || <span className="text-gray-400">—</span>}</td>
                     <td className="px-4 py-3">
                       <ExpiryChip membership={m.currentMembership} />
+                      <div>
+                        <DuesChip billing={m.currentMembership?.billing} />
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge status={m.status} dot />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        {m.currentMembership?.billing?.outstanding > 0 && (
+                          <button
+                            title={`Collect ${formatCurrency(m.currentMembership.billing.outstanding)}`}
+                            aria-label="Collect payment"
+                            onClick={() => setCollectPaymentFor(m)}
+                            className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                          >
+                            <CreditCard size={16} />
+                          </button>
+                        )}
                         <button
                           title="Edit"
                           aria-label="Edit member"
@@ -408,6 +448,23 @@ const MembersPage = () => {
         danger
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <RecordPaymentModal
+        open={Boolean(collectPaymentFor)}
+        onClose={() => setCollectPaymentFor(null)}
+        onSaved={() => {
+          fetchMembers(pagination.page);
+          fetchSummary();
+        }}
+        presetMember={collectPaymentFor}
+        presetMembership={collectPaymentFor?.currentMembership}
+        title="Collect Payment"
+        helperNote={
+          collectPaymentFor?.currentMembership?.billing?.outstanding > 0
+            ? `${formatCurrency(collectPaymentFor.currentMembership.billing.outstanding)} is still outstanding on this member's current membership.`
+            : null
+        }
       />
     </div>
   );

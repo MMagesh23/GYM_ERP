@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertCircle, LayoutDashboard } from 'lucide-react';
 import { dashboardApi } from '../../services/dashboardApi';
@@ -43,7 +44,18 @@ const WIDGET_META = {
   netProfit: { type: 'card', cardProps: (v) => ({ icon: Wallet, label: 'Net Profit', value: formatCurrency(v), tone: (v ?? 0) >= 0 ? 'green' : 'red' }) },
   equipmentCount: { type: 'card', cardProps: (v) => ({ icon: Dumbbell, label: 'Equipment', value: v ?? 0, tone: 'default' }) },
   membershipsExpiringSoon: { type: 'card', cardProps: (v) => ({ icon: Clock, label: 'Expiring in 7 Days', value: v ?? 0, tone: 'amber' }) },
-  pendingPayments: { type: 'card', cardProps: (v) => ({ icon: CreditCard, label: 'Pending Payments', value: formatCurrency(v), tone: 'amber' }) },
+  pendingPayments: {
+    type: 'card',
+    cardProps: (v, summary) => ({
+      icon: CreditCard,
+      label: 'Pending Payments',
+      value: formatCurrency(v),
+      hint: summary?.pendingPaymentsCount
+        ? `${summary.pendingPaymentsCount} membership${summary.pendingPaymentsCount === 1 ? '' : 's'} owed on`
+        : undefined,
+      tone: 'amber',
+    }),
+  },
   revenueChart: { type: 'chart' },
   membershipGrowthChart: { type: 'chart' },
   profitChart: { type: 'chart' },
@@ -52,6 +64,7 @@ const WIDGET_META = {
 
 const DashboardPage = () => {
   const { user } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
   const [charts, setCharts] = useState(null);
   const [allowedWidgets, setAllowedWidgets] = useState([]);
@@ -136,7 +149,11 @@ const DashboardPage = () => {
           {cardKeys.length > 0 && (
             <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {cardKeys.map((key) => (
-                <StatCard key={key} {...WIDGET_META[key].cardProps(summary[key])} />
+                <StatCard
+                  key={key}
+                  {...WIDGET_META[key].cardProps(summary[key], summary)}
+                  onClick={key === 'pendingPayments' ? () => navigate('/payments?tab=dues') : undefined}
+                />
               ))}
             </div>
           )}

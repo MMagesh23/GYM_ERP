@@ -4,6 +4,7 @@ import { ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import MemberSearchSelect from '../../components/common/MemberSearchSelect';
 import { membershipApi } from '../../services/membershipApi';
+import { formatCurrency } from '../../utils/memberHelpers';
 
 const TransferMembershipModal = ({ open, onClose, onSaved, membership, currentMemberName }) => {
   const [toMember, setToMember] = useState(null);
@@ -42,6 +43,17 @@ const TransferMembershipModal = ({ open, onClose, onSaved, membership, currentMe
           This can't be undone.
         </span>
       </div>
+
+      {membership.billing?.outstanding > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>
+            <strong>{formatCurrency(membership.billing.outstanding)}</strong> is still outstanding on this membership. A
+            transfer does NOT carry the debt to the new member — it stays owed by {currentMemberName}. Consider collecting it
+            first, or note that it'll need chasing separately afterward.
+          </span>
+        </div>
+      )}
 
       <label className="mb-1 block text-sm font-medium">Transfer to *</label>
       <MemberSearchSelect value={toMember} onChange={setToMember} />

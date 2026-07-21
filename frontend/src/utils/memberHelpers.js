@@ -60,6 +60,20 @@ export const expiryLabel = (days) => {
   return `${days} days left`;
 };
 
+// Mirrors backend/utils/billing.js#summarizeMembershipBilling's status enum.
+// A membership never auto-bills itself (assigning/renewing/changing one only
+// creates the debt, never a Payment) — this maps that computed status to how
+// it should read and look across the UI, so "owes money" can never be missed.
+export const BILLING_STATUS_META = {
+  unpaid: { label: 'Unpaid', tone: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  partial: { label: 'Partially paid', tone: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  paid: { label: 'Paid', tone: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+  overpaid: { label: 'Overpaid', tone: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  unbilled: { label: 'No charge', tone: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
+};
+
+export const billingStatusMeta = (status) => BILLING_STATUS_META[status] || BILLING_STATUS_META.unbilled;
+
 export const formatCurrency = (n, symbol = '₹') =>
   `${symbol}${(Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 

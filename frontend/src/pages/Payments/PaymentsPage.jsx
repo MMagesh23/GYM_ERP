@@ -1,16 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Download, FileText, Undo2, CreditCard } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Plus, Download, FileText, Undo2, CreditCard, AlertCircle, ReceiptText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import { paymentApi } from '../../services/paymentApi';
+import { membershipApi } from '../../services/membershipApi';
 import Badge from '../../components/common/Badge';
+import Avatar from '../../components/common/Avatar';
 import Pagination from '../../components/common/Pagination';
 import RecordPaymentModal from './RecordPaymentModal';
 import RefundModal from './RefundModal';
 import PageHeader from '../../components/common/PageHeader';
 import { SkeletonTable } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
-import { formatCurrency } from '../../utils/memberHelpers';
+import { formatCurrency, billingStatusMeta } from '../../utils/memberHelpers';
 
 const STATUS_OPTIONS = ['paid', 'pending', 'partial', 'refunded', 'partially_refunded', 'failed'];
 const METHOD_OPTIONS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
@@ -24,6 +27,9 @@ const SORT_OPTIONS = [
 
 const PaymentsPage = () => {
   const { user } = useSelector((state) => state.auth);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('tab') === 'dues' ? 'dues' : 'payments');
+
   const [payments, setPayments] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [status, setStatus] = useState('');
@@ -31,10 +37,38 @@ const PaymentsPage = () => {
   const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Every live membership that still owes money — a membership never bills
+  // itself, so this is the one screen that answers "who owes what" without
+  // hunting through the member list one profile at a time.
+  const [dues, setDues] = useState([]);
+  const [duesLoading, setDuesLoading] = useState(true);
+  const [collectPaymentFor, setCollectPaymentFor] = useState(null);
+
   const [recordOpen, setRecordOpen] = useState(false);
   const [refundTarget, setRefundTarget] = useState(null);
 
   const [sortBy, sortDir] = sort ? sort.split(':') : [undefined, undefined];
+
+  const switchTab = (next) => {
+    setTab(next);
+    setSearchParams(next === 'dues' ? { tab: 'dues' } : {}, { replace: true });
+  };
+
+  const fetchDues = useCallback(async () => {
+    setDuesLoading(true);
+    try {
+      const { data } = await membershipApi.outstanding();
+      setDues(data.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load outstanding dues');
+    } finally {
+      setDuesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDues();
+  }, [fetchDues]);
 
   const fetchPayments = useCallback(
     async (page = 1) => {
@@ -94,6 +128,33 @@ const PaymentsPage = () => {
         }
       />
 
+      <div className="mb-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+        <button
+          onClick={() => switchTab('payments')}
+          className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            tab === 'payments' ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+          }`}
+        >
+          All Payments
+        </button>
+        <button
+          onClick={() => switchTab('dues')}
+          className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            tab === 'dues' ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+          }`}
+        >
+          <AlertCircle size={14} />
+          Outstanding Dues
+          {!duesLoading && dues.length > 0 && (
+            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+              {dues.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === 'payments' && (
+      <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <select
           value={status}
@@ -234,8 +295,96 @@ const PaymentsPage = () => {
           <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchPayments} />
         )}
       </div>
+      </>
+      )}
+
+      {tab === 'dues' && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+          {duesLoading ? (
+            <SkeletonTable rows={6} cols={5} />
+          ) : dues.length === 0 ? (
+            <EmptyState
+              icon={ReceiptText}
+              title="Everyone's paid up"
+              description="No live membership currently has an outstanding balance."
+            />
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+                <tr>
+                  <th className="px-4 py-3">Member</th>
+                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Invoiced</th>
+                  <th className="px-4 py-3">Collected</th>
+                  <th className="px-4 py-3">Outstanding</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {dues.map((m) => {
+                  const meta = billingStatusMeta(m.billing.status);
+                  return (
+                    <tr key={m._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                      <td className="px-4 py-3">
+                        {m.member ? (
+                          <div className="flex items-center gap-2.5">
+                            <Avatar firstName={m.member.firstName} lastName={m.member.lastName} size="sm" />
+                            <div>
+                              <p className="font-medium text-gray-900 dark:text-gray-100">
+                                {m.member.firstName} {m.member.lastName || ''}
+                              </p>
+                              <p className="text-xs text-gray-400">{m.member.memberId}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{m.plan?.name || '—'}</td>
+                      <td className="px-4 py-3">{formatCurrency(m.billing.invoiced)}</td>
+                      <td className="px-4 py-3">{formatCurrency(m.billing.collected)}</td>
+                      <td className="px-4 py-3 font-medium text-red-600 dark:text-red-400">{formatCurrency(m.billing.outstanding)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.tone}`}>
+                          {meta.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setCollectPaymentFor(m)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+                        >
+                          <CreditCard size={12} /> Collect
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <RecordPaymentModal open={recordOpen} onClose={() => setRecordOpen(false)} onSaved={() => fetchPayments(1)} />
+
+      {/* Collecting directly from the Outstanding Dues tab — pre-scoped to the
+          member/membership in that row so there's no re-searching involved. */}
+      <RecordPaymentModal
+        open={Boolean(collectPaymentFor)}
+        onClose={() => setCollectPaymentFor(null)}
+        onSaved={() => {
+          fetchDues();
+          fetchPayments(pagination.page);
+        }}
+        presetMember={collectPaymentFor?.member}
+        presetMembership={collectPaymentFor}
+        title="Collect Payment"
+        helperNote={`${formatCurrency(collectPaymentFor?.billing?.outstanding || 0)} outstanding on ${
+          collectPaymentFor?.plan?.name || 'this membership'
+        }.`}
+      />
 
       <RefundModal
         open={Boolean(refundTarget)}

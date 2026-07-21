@@ -1,6 +1,7 @@
 const Membership = require('../models/Membership');
 const MembershipPlan = require('../models/MembershipPlan');
 const Member = require('../models/Member');
+const Payment = require('../models/Payment');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -11,7 +12,32 @@ const {
   calcPlanChangeAmount,
   calcFreezeExtension,
   calcUnfreezeAdjustment,
+  summarizeMembershipBilling,
 } = require('../utils/billing');
+
+// Shared by historyForMember and anywhere else that needs "how much of each of
+// these memberships has actually been collected" — see utils/billing.js for why
+// this can't just be read off Member.status or assumed from finalAmount alone.
+const attachBillingSummaries = async (memberships) => {
+  const ids = memberships.map((m) => m._id);
+  if (ids.length === 0) return memberships;
+
+  const payments = await Payment.find({ membership: { $in: ids } })
+    .select('membership finalAmount amountPaid status refund.refundedAmount')
+    .lean();
+
+  const byMembership = payments.reduce((acc, p) => {
+    const key = String(p.membership);
+    (acc[key] = acc[key] || []).push(p);
+    return acc;
+  }, {});
+
+  return memberships.map((m) => {
+    const plain = typeof m.toObject === 'function' ? m.toObject() : m;
+    plain.billing = summarizeMembershipBilling(plain.finalAmount, byMembership[String(plain._id)] || []);
+    return plain;
+  });
+};
 
 // @desc  Start a brand-new membership for a member
 // @route POST /api/memberships
@@ -71,7 +97,11 @@ const createMembership = asyncHandler(async (req, res) => {
       (Number(extraDiscount) > 0 ? ` with a discretionary discount of ${Number(extraDiscount).toFixed(2)}` : ''),
   });
 
-  res.status(201).json({ success: true, data: membership });
+  // Brand new record — by definition no Payment has ever referenced it yet.
+  const membershipWithBilling = membership.toObject();
+  membershipWithBilling.billing = summarizeMembershipBilling(membership.finalAmount, []);
+
+  res.status(201).json({ success: true, data: membershipWithBilling });
 });
 
 // @desc  Renew the member's current (or a specific) membership on the same plan
@@ -121,7 +151,10 @@ const renewMembership = asyncHandler(async (req, res) => {
     description: `Membership renewed (${plan.name})`,
   });
 
-  res.status(201).json({ success: true, data: renewal });
+  const renewalWithBilling = renewal.toObject();
+  renewalWithBilling.billing = summarizeMembershipBilling(renewal.finalAmount, []);
+
+  res.status(201).json({ success: true, data: renewalWithBilling });
 });
 
 // @desc  Upgrade or downgrade to a different plan, effective immediately
@@ -177,7 +210,10 @@ const changePlan = asyncHandler(async (req, res) => {
       `${remainingDays} unused day(s) credited (${unusedCredit.toFixed(2)}), ${amountDue.toFixed(2)} charged`,
   });
 
-  res.status(201).json({ success: true, data: changed });
+  const changedWithBilling = changed.toObject();
+  changedWithBilling.billing = summarizeMembershipBilling(changed.finalAmount, []);
+
+  res.status(201).json({ success: true, data: changedWithBilling });
 });
 
 // @desc  Transfer a membership to a different member (e.g. gifted/sold membership)
@@ -367,7 +403,27 @@ const historyForMember = asyncHandler(async (req, res) => {
     // discount, and tax available regardless of which history record it opened from.
     .populate('plan')
     .sort({ createdAt: -1 });
-  res.json({ success: true, data: memberships });
+  const withBilling = await attachBillingSummaries(memberships);
+  res.json({ success: true, data: withBilling });
+});
+
+// @desc  Every live (active/frozen) membership that still has money owed on it —
+// i.e. finalAmount not fully covered by linked Payment records. Since nothing
+// auto-bills a membership, this is the only place that surfaces the full list of
+// "who owes what" in one screen, instead of hunting member-by-member.
+// @route GET /api/memberships/outstanding
+const outstandingMemberships = asyncHandler(async (req, res) => {
+  const memberships = await Membership.find({ status: { $in: ['active', 'frozen'] } })
+    .populate('member', 'memberId firstName lastName phone email')
+    .populate('plan', 'name')
+    .sort({ createdAt: -1 });
+
+  const withBilling = await attachBillingSummaries(memberships);
+  const outstanding = withBilling
+    .filter((m) => m.billing.outstanding > 0)
+    .sort((a, b) => b.billing.outstanding - a.billing.outstanding);
+
+  res.json({ success: true, data: outstanding });
 });
 
 module.exports = {
@@ -380,5 +436,6 @@ module.exports = {
   cancelMembership,
   expiringSoon,
   historyForMember,
+  outstandingMemberships,
   calcFinalAmount, // re-exported from utils/billing for backward compatibility with any existing imports
 };

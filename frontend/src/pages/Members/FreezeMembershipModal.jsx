@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Snowflake } from 'lucide-react';
+import { Snowflake, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import { membershipApi } from '../../services/membershipApi';
+import { formatCurrency } from '../../utils/memberHelpers';
 
 const FreezeMembershipModal = ({ open, onClose, onSaved, membership }) => {
   const [days, setDays] = useState(7);
@@ -48,6 +49,16 @@ const FreezeMembershipModal = ({ open, onClose, onSaved, membership }) => {
         <strong>{remainingFreezeDays}</strong> freeze day{remainingFreezeDays === 1 ? '' : 's'} remaining on this plan
         {usedFreezeDays > 0 && ` (${usedFreezeDays} already used)`}. The end date shifts forward by the number of days frozen.
       </p>
+
+      {membership.billing?.outstanding > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>
+            This membership still has <strong>{formatCurrency(membership.billing.outstanding)}</strong> outstanding. Freezing
+            doesn't affect what's owed — you can still collect it from the membership timeline afterward.
+          </span>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>

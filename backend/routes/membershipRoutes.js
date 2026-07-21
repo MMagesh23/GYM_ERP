@@ -13,11 +13,13 @@ const {
   cancelMembership,
   expiringSoon,
   historyForMember,
+  outstandingMemberships,
 } = require('../controllers/membershipController');
 
 const router = express.Router();
 
 router.get('/expiring', protect, can('memberships', 'view'), expiringSoon);
+router.get('/outstanding', protect, can('payments', 'view'), outstandingMemberships);
 router.get('/member/:memberId', protect, can('memberships', 'view'), historyForMember);
 
 router.post(
