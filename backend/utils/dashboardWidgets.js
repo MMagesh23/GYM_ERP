@@ -12,7 +12,7 @@ const WIDGET_DEFS = {
   netProfit: { module: 'expenses', summaryFields: ['netProfit'] },
   equipmentCount: { module: 'equipment', summaryFields: ['equipmentCount'] },
   membershipsExpiringSoon: { module: 'memberships', summaryFields: ['membershipsExpiringSoon'] },
-  pendingPayments: { module: 'payments', summaryFields: ['pendingPayments'] },
+  pendingPayments: { module: 'payments', summaryFields: ['pendingPayments', 'pendingPaymentsCount'] },
   revenueChart: { module: 'payments', chartFields: ['revenueByMonth'] },
   membershipGrowthChart: { module: 'members', chartFields: ['membershipGrowth'] },
   profitChart: { module: 'expenses', chartFields: ['profitByMonth', 'expenseByMonth'] },

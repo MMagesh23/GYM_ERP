@@ -20,7 +20,10 @@ import ChangePlanModal from './ChangePlanModal';
 import TransferMembershipModal from './TransferMembershipModal';
 import FreezeMembershipModal from './FreezeMembershipModal';
 import MemberFormModal from './MemberFormModal';
-import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency, formatDate } from '../../utils/memberHelpers';
+import RecordPaymentModal from '../Payments/RecordPaymentModal';
+import {
+  daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency, formatDate, billingStatusMeta,
+} from '../../utils/memberHelpers';
 
 const TABS = [
   { key: 'overview', label: 'Overview' },
@@ -40,9 +43,12 @@ const InfoRow = ({ icon: Icon, label, value }) => (
   </div>
 );
 
-const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChangePlan, onTransfer, onCancel }) => {
+const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChangePlan, onTransfer, onCancel, onCollectPayment }) => {
   const isActive = record.status === 'active';
   const isFrozen = record.status === 'frozen';
+  const billing = record.billing;
+  const meta = billing ? billingStatusMeta(billing.status) : null;
+  const canCollect = billing && billing.outstanding > 0;
 
   return (
     <div className="relative pb-6 pl-8 last:pb-0">
@@ -61,11 +67,37 @@ const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChang
               {record.type} · {formatDate(record.startDate)} — {formatDate(record.endDate)}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{formatCurrency(record.finalAmount)}</span>
-            <Badge status={record.status} dot />
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">{formatCurrency(record.finalAmount)}</span>
+              <Badge status={record.status} dot />
+            </div>
+            {meta && (
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.tone}`}>
+                {meta.label}
+                {billing.status === 'partial' && ` — ${formatCurrency(billing.outstanding)} due`}
+              </span>
+            )}
           </div>
         </div>
+
+        {/* A membership never bills itself — assigning/renewing/changing one only
+            records the debt, nothing ever creates a Payment automatically. This is
+            the one place on the timeline where that debt can be collected without
+            leaving the page or re-searching for the member on the Payments screen. */}
+        {canCollect && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
+            <span className="text-xs text-amber-800 dark:text-amber-300">
+              {formatCurrency(billing.outstanding)} not yet collected for this membership.
+            </span>
+            <button
+              onClick={() => onCollectPayment(record)}
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+            >
+              <CreditCard size={12} /> Collect Payment
+            </button>
+          </div>
+        )}
 
         {isActive && (
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
@@ -141,6 +173,10 @@ const MemberProfilePage = () => {
   const [freezeTarget, setFreezeTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [unfreezeTarget, setUnfreezeTarget] = useState(null);
+  // Membership currently offered for payment collection — either the staff
+  // clicked "Collect Payment" on a timeline card, or a membership was just
+  // assigned/renewed/changed and still has money owed on it.
+  const [collectPaymentFor, setCollectPaymentFor] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,11 +200,32 @@ const MemberProfilePage = () => {
     load();
   }, [load]);
 
+  // A membership never bills itself — assign/renew/change-plan only create the
+  // debt (finalAmount), never a Payment. Whenever one of those actions leaves an
+  // outstanding balance, immediately offer to collect it instead of relying on
+  // staff to remember to do it later from the separate Payments screen.
+  const offerPaymentCollectionIfDue = (membership) => {
+    if (membership?.billing?.outstanding > 0) {
+      setCollectPaymentFor(membership);
+    }
+  };
+
+  const handleAssignSaved = (membership) => {
+    load();
+    offerPaymentCollectionIfDue(membership);
+  };
+
+  const handleChangePlanSaved = (membership) => {
+    load();
+    offerPaymentCollectionIfDue(membership);
+  };
+
   const handleRenew = async (membership) => {
     try {
-      await membershipApi.renew(membership._id);
+      const { data } = await membershipApi.renew(membership._id);
       toast.success('Membership renewed');
       load();
+      offerPaymentCollectionIfDue(data.data);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Renewal failed');
     }
@@ -229,14 +286,15 @@ const MemberProfilePage = () => {
     [payments]
   );
 
+  // FIX: previously scanned only Payment records with status pending/partial —
+  // which is exactly the case that's silently wrong right after a membership is
+  // assigned/renewed/changed, since none of those create a Payment on their own.
+  // A membership with zero payment records still owes its full finalAmount; this
+  // now sums the same `billing.outstanding` figure the timeline cards use, so the
+  // two can never disagree.
   const outstandingBalance = useMemo(
-    () =>
-      payments.reduce((sum, p) => {
-        if (p.status !== 'pending' && p.status !== 'partial') return sum;
-        const collected = p.amountPaid ?? 0;
-        return sum + Math.max(p.finalAmount - collected, 0);
-      }, 0),
-    [payments]
+    () => history.reduce((sum, h) => sum + (h.billing?.outstanding || 0), 0),
+    [history]
   );
 
   if (loading || !member) {
@@ -331,6 +389,14 @@ const MemberProfilePage = () => {
               <span className="text-amber-600 dark:text-amber-400"> · {formatCurrency(outstandingBalance)} outstanding</span>
             )}
           </p>
+          {outstandingBalance > 0 && (
+            <button
+              onClick={() => setCollectPaymentFor(history.find((h) => h.billing?.outstanding > 0) || activeMembership)}
+              className="mt-2 text-xs font-medium text-brand-600 hover:underline"
+            >
+              Collect payment →
+            </button>
+          )}
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
@@ -425,6 +491,7 @@ const MemberProfilePage = () => {
                   onChangePlan={setChangePlanTarget}
                   onTransfer={setTransferTarget}
                   onCancel={setCancelTarget}
+                  onCollectPayment={setCollectPaymentFor}
                 />
               ))}
             </div>
@@ -486,8 +553,8 @@ const MemberProfilePage = () => {
 
       {/* Modals */}
       <MemberFormModal open={editOpen} member={member} onClose={() => setEditOpen(false)} onSaved={load} />
-      <AssignMembershipModal open={assignOpen} onClose={() => setAssignOpen(false)} onSaved={load} memberId={id} />
-      <ChangePlanModal open={Boolean(changePlanTarget)} membership={changePlanTarget} onClose={() => setChangePlanTarget(null)} onSaved={load} />
+      <AssignMembershipModal open={assignOpen} onClose={() => setAssignOpen(false)} onSaved={handleAssignSaved} memberId={id} />
+      <ChangePlanModal open={Boolean(changePlanTarget)} membership={changePlanTarget} onClose={() => setChangePlanTarget(null)} onSaved={handleChangePlanSaved} />
       <TransferMembershipModal
         open={Boolean(transferTarget)}
         membership={transferTarget}
@@ -496,6 +563,22 @@ const MemberProfilePage = () => {
         onSaved={load}
       />
       <FreezeMembershipModal open={Boolean(freezeTarget)} membership={freezeTarget} onClose={() => setFreezeTarget(null)} onSaved={load} />
+
+      {/* Guided assign/renew/change-plan → collect payment flow, and the
+          "Collect Payment" action on timeline cards / the Total Paid stat — all
+          funnel through here, pre-scoped to this member so nobody has to
+          re-search for them on the separate Payments screen. */}
+      <RecordPaymentModal
+        open={Boolean(collectPaymentFor)}
+        onClose={() => setCollectPaymentFor(null)}
+        onSaved={load}
+        presetMember={member}
+        presetMembership={collectPaymentFor}
+        title="Collect Payment"
+        helperNote={`${collectPaymentFor?.plan?.name || 'This membership'} was ${
+          collectPaymentFor?.type === 'renewal' ? 'renewed' : collectPaymentFor?.type === 'new' ? 'assigned' : 'updated'
+        } — record what's been collected for it to keep billing in sync.`}
+      />
 
       <ConfirmDialog
         open={Boolean(cancelTarget)}

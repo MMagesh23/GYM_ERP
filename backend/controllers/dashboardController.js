@@ -46,12 +46,48 @@ const summary = asyncHandler(async (req, res) => {
     ]),
     Equipment.countDocuments({ status: { $ne: 'retired' } }),
     Membership.countDocuments({ status: 'active', endDate: { $gte: now, $lte: soon } }),
-    Payment.aggregate([{ $match: { status: 'pending' } }, { $group: { _id: null, total: { $sum: '$finalAmount' }, count: { $sum: 1 } } }]),
+    // FIX: previously only summed Payment records with status='pending', which
+    // missed the outstanding remainder of 'partial' payments entirely, and — more
+    // importantly — missed memberships with NO Payment record at all, which is the
+    // normal state right after a membership is assigned/renewed/changed (nothing
+    // auto-creates a payment for it). This aggregates the real number: for every
+    // live (active/frozen) membership, invoiced minus actually-collected.
+    Membership.aggregate([
+      { $match: { status: { $in: ['active', 'frozen'] } } },
+      { $lookup: { from: 'payments', localField: '_id', foreignField: 'membership', as: 'pmts' } },
+      {
+        $addFields: {
+          collected: {
+            $sum: {
+              $map: {
+                input: { $filter: { input: '$pmts', cond: { $ne: ['$$this.status', 'failed'] } } },
+                as: 'p',
+                in: {
+                  $max: [
+                    {
+                      $subtract: [
+                        { $ifNull: ['$$p.amountPaid', '$$p.finalAmount'] },
+                        { $ifNull: ['$$p.refund.refundedAmount', 0] },
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+      { $addFields: { outstanding: { $max: [{ $subtract: ['$finalAmount', '$collected'] }, 0] } } },
+      { $match: { outstanding: { $gt: 0 } } },
+      { $group: { _id: null, total: { $sum: '$outstanding' }, count: { $sum: 1 } } },
+    ]),
   ]);
 
   const monthlyRevenue = monthlyRevenueAgg[0]?.total || 0;
   const monthlyExpenses = monthlyExpenseAgg[0]?.total || 0;
   const pendingPayments = pendingPaymentsAgg[0]?.total || 0;
+  const pendingPaymentsCount = pendingPaymentsAgg[0]?.count || 0;
 
   const summaryData = {
     totalMembers,
@@ -64,6 +100,7 @@ const summary = asyncHandler(async (req, res) => {
     equipmentCount,
     membershipsExpiringSoon: expiringMemberships,
     pendingPayments,
+    pendingPaymentsCount,
   };
 
   const settings = await Settings.getSingleton();

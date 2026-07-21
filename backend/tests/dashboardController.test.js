@@ -11,18 +11,22 @@ jest.mock('../models/Member', () => ({
 
 jest.mock('../models/Membership', () => ({
   countDocuments: jest.fn().mockResolvedValue(7),
-  aggregate: jest.fn().mockResolvedValue([{ _id: 'Gold', count: 4 }]),
+  // Two different aggregations run through Membership.aggregate: the dashboard's
+  // pending-payments rollup (joins against payments) and the plan-distribution
+  // chart (joins against membershipplans) — branch on which $lookup is present.
+  aggregate: jest.fn((pipeline) => {
+    const lookupStage = pipeline.find((s) => s.$lookup);
+    if (lookupStage?.$lookup?.from === 'payments') {
+      return Promise.resolve([{ _id: null, total: 5400, count: 3 }]);
+    }
+    return Promise.resolve([{ _id: 'Gold', count: 4 }]);
+  }),
 }));
 
 jest.mock('../models/MembershipPlan', () => ({}));
 
 jest.mock('../models/Payment', () => ({
-  aggregate: jest.fn((pipeline) => {
-    if (pipeline.some((stage) => stage.$group && stage.$group.count)) {
-      return Promise.resolve([{ _id: null, total: 5400, count: 3 }]);
-    }
-    return Promise.resolve([{ _id: 1, total: 1000 }, { _id: 2, total: 2000 }]);
-  }),
+  aggregate: jest.fn().mockResolvedValue([{ _id: 1, total: 1000 }, { _id: 2, total: 2000 }]),
 }));
 
 jest.mock('../models/Expense', () => ({
@@ -55,6 +59,7 @@ describe('dashboard controller', () => {
           equipmentCount: 9,
           membershipsExpiringSoon: 7,
           pendingPayments: 5400,
+          pendingPaymentsCount: 3,
         }),
       })
     );

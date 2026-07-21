@@ -130,6 +130,52 @@ const calcUnfreezeAdjustment = (lastFreezeEntry, currentEndDate, now = new Date(
   };
 };
 
+// A membership's `finalAmount` is what's owed; it is NEVER auto-billed — nothing
+// creates a Payment record when a membership is assigned/renewed/changed. That gap
+// used to be invisible: the UI only showed billing info sourced from the Payments
+// list, so a membership with zero payment records (the common case right after
+// assigning one) looked "fully settled" everywhere — profile stat cards, the
+// member list, the dashboard — when in fact nothing had been collected yet.
+//
+// This is the single source of truth for "how much of this membership has been
+// collected", computed straight from finalAmount + whatever Payment records
+// actually reference it (never assumed). Every surface that shows membership
+// billing status (member list, member profile, membership timeline, dashboard)
+// should go through this so they can never disagree with each other.
+const BILLING_STATUS = {
+  UNBILLED: 'unbilled', // finalAmount is 0 (e.g. a transfer) — nothing to collect
+  UNPAID: 'unpaid', // nothing collected yet, including "no payment record exists at all"
+  PARTIAL: 'partial',
+  PAID: 'paid',
+  OVERPAID: 'overpaid', // collected more than invoiced (extra payment, or a discount applied after collection)
+};
+
+const summarizeMembershipBilling = (finalAmount, payments = []) => {
+  const invoiced = Math.round((Number(finalAmount) || 0) * 100) / 100;
+
+  const collected = payments.reduce((sum, p) => {
+    if (p.status === 'failed') return sum; // nothing was ever received
+    const paid = p.amountPaid ?? p.finalAmount ?? 0;
+    const refunded = p.refund?.refundedAmount || 0;
+    return sum + Math.max(paid - refunded, 0);
+  }, 0);
+  const roundedCollected = Math.round(collected * 100) / 100;
+  const outstanding = Math.max(Math.round((invoiced - roundedCollected) * 100) / 100, 0);
+
+  let status;
+  if (invoiced <= 0) {
+    status = roundedCollected > 0 ? BILLING_STATUS.OVERPAID : BILLING_STATUS.UNBILLED;
+  } else if (roundedCollected <= 0) {
+    status = BILLING_STATUS.UNPAID;
+  } else if (roundedCollected < invoiced) {
+    status = BILLING_STATUS.PARTIAL;
+  } else {
+    status = roundedCollected > invoiced ? BILLING_STATUS.OVERPAID : BILLING_STATUS.PAID;
+  }
+
+  return { invoiced, collected: roundedCollected, outstanding, status };
+};
+
 module.exports = {
   DAY_MS,
   calcFinalAmount,
@@ -139,4 +185,6 @@ module.exports = {
   validateRefundAmount,
   calcFreezeExtension,
   calcUnfreezeAdjustment,
+  BILLING_STATUS,
+  summarizeMembershipBilling,
 };

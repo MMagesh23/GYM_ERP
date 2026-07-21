@@ -1,9 +1,41 @@
 const ExcelJS = require('exceljs');
 const Member = require('../models/Member');
+const Payment = require('../models/Payment');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { generateMemberId } = require('../utils/idGenerator');
+const { summarizeMembershipBilling } = require('../utils/billing');
+
+// Attaches a `billing` summary (invoiced/collected/outstanding/status) onto each
+// member's currentMembership so list/profile views can show "this member owes
+// money" without a separate trip to the Payments screen. A membership can go
+// weeks with zero linked Payment records (assigning/renewing one never creates
+// a payment on its own) — without this, those cases silently look fully paid.
+const attachCurrentMembershipBilling = async (members) => {
+  const membershipIds = members.map((m) => m.currentMembership?._id).filter(Boolean);
+  if (membershipIds.length === 0) return members;
+
+  const payments = await Payment.find({ membership: { $in: membershipIds } })
+    .select('membership finalAmount amountPaid status refund.refundedAmount')
+    .lean();
+  const byMembership = payments.reduce((acc, p) => {
+    const key = String(p.membership);
+    (acc[key] = acc[key] || []).push(p);
+    return acc;
+  }, {});
+
+  return members.map((m) => {
+    const plain = m.toObject();
+    if (plain.currentMembership) {
+      plain.currentMembership.billing = summarizeMembershipBilling(
+        plain.currentMembership.finalAmount,
+        byMembership[String(plain.currentMembership._id)] || []
+      );
+    }
+    return plain;
+  });
+};
 
 // @desc  List members with pagination, search, and filters
 // @route GET /api/members?page=1&limit=20&q=&status=&gender=
@@ -39,9 +71,11 @@ const listMembers = asyncHandler(async (req, res) => {
     Member.countDocuments(filter),
   ]);
 
+  const membersWithBilling = await attachCurrentMembershipBilling(members);
+
   res.json({
     success: true,
-    data: members,
+    data: membersWithBilling,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 });
@@ -54,7 +88,8 @@ const getMember = asyncHandler(async (req, res) => {
     populate: { path: 'plan' },
   });
   if (!member) throw new ApiError(404, 'Member not found.');
-  res.json({ success: true, data: member });
+  const [withBilling] = await attachCurrentMembershipBilling([member]);
+  res.json({ success: true, data: withBilling });
 });
 
 // @desc  Create a new member (auto-generates memberId)
