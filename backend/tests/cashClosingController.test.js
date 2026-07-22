@@ -14,17 +14,20 @@ jest.mock('../models/CashClosing', () => {
 });
 
 describe('cashClosingController.closeDrawer', () => {
-  const req = (body) => ({ body, user: { _id: 'u1', name: 'Admin' } });
+  const req = (body) => ({ body, user: { _id: 'u1', name: 'Admin', role: 'admin' } });
   const flushRes = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    Payment.aggregate.mockResolvedValue([{ _id: null, total: 5000 }]);
+    // First aggregate call = gross collections, second = cash refunds, third = expenses
+    Payment.aggregate
+      .mockResolvedValueOnce([{ _id: null, total: 5000 }]) // collections
+      .mockResolvedValueOnce([{ _id: null, total: 0 }]);    // refunds
     Expense.aggregate.mockResolvedValue([{ _id: null, total: 1200 }]);
     CashClosing.findOne.mockResolvedValue(null); // no prior day, opening cash = 0
   });
 
-  it('computes expectedClosingCash as opening + collections - expenses', async () => {
+  it('computes expectedClosingCash as opening + collections - refunds - expenses', async () => {
     CashClosing.findOneAndUpdate.mockResolvedValue({ _id: 'c1', expectedClosingCash: 3800, variance: 0 });
     const res = flushRes();
     const next = jest.fn();
@@ -34,11 +37,39 @@ describe('cashClosingController.closeDrawer', () => {
     expect(CashClosing.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ status: { $ne: 'closed' } }),
       expect.objectContaining({
-        $set: expect.objectContaining({ expectedClosingCash: 3800, cashCollections: 5000, cashExpenses: 1200, variance: 0 }),
+        $set: expect.objectContaining({
+          expectedClosingCash: 3800,
+          cashCollections: 5000,
+          cashRefunds: 0,
+          cashExpenses: 1200,
+          variance: 0,
+        }),
       }),
       expect.objectContaining({ upsert: true })
     );
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('subtracts cash refunds issued today from the expected closing cash', async () => {
+    // Override the default mocks for this test: 5000 collected, 800 refunded in cash today, 1200 expenses
+    Payment.aggregate.mockReset();
+    Payment.aggregate
+      .mockResolvedValueOnce([{ _id: null, total: 5000 }]) // collections
+      .mockResolvedValueOnce([{ _id: null, total: 800 }]);  // refunds
+    CashClosing.findOneAndUpdate.mockResolvedValue({ _id: 'c1' });
+    const res = flushRes();
+    const next = jest.fn();
+
+    // expected = 0 + 5000 - 800 - 1200 = 3000
+    await cashClosingController.closeDrawer(req({ actualClosingCash: 3000 }), res, next);
+
+    expect(CashClosing.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        $set: expect.objectContaining({ cashRefunds: 800, expectedClosingCash: 3000, variance: 0 }),
+      }),
+      expect.anything()
+    );
   });
 
   it('requires a varianceReason when actual cash does not match expected', async () => {

@@ -4,13 +4,19 @@ const Expense = require('../models/Expense');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
+const { GROSS_COLLECTED_EXPR } = require('../utils/financeCalculations');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const computeCashActivity = async (dayStart) => {
   const dayEnd = new Date(dayStart.getTime() + DAY_MS);
 
-  const [collectedAgg, expenseAgg] = await Promise.all([
+  const [collectedAgg, cashRefundAgg, expenseAgg] = await Promise.all([
+    // Cash collected on payments MADE today. Deliberately NOT netted against
+    // refunds here — refunds are handled as a separate line below, attributed
+    // to the day the refund itself happened (see cashRefundAgg), matching the
+    // same gross-then-subtract-refunds accounting model used everywhere else
+    // in the app (see utils/financeCalculations.js).
     Payment.aggregate([
       {
         $match: {
@@ -22,16 +28,23 @@ const computeCashActivity = async (dayStart) => {
       {
         $group: {
           _id: null,
-          total: {
-            $sum: {
-              $max: [
-                { $subtract: [{ $ifNull: ['$amountPaid', '$finalAmount'] }, { $ifNull: ['$refund.refundedAmount', 0] }] },
-                0,
-              ],
-            },
-          },
+          total: { $sum: GROSS_COLLECTED_EXPR },
         },
       },
+    ]),
+    // FIX: cash physically paid back out TODAY, regardless of which day the
+    // original payment was recorded. Without this, refunding a cash payment
+    // from an already-closed prior day was invisible to today's till
+    // reconciliation and produced a guaranteed, unexplained variance at close.
+    Payment.aggregate([
+      {
+        $match: {
+          paymentMethod: 'cash',
+          'refund.refundDate': { $gte: dayStart, $lt: dayEnd },
+          'refund.refundedAmount': { $gt: 0 },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$refund.refundedAmount' } } },
     ]),
     Expense.aggregate([
       { $match: { paymentMethod: 'cash', expenseDate: { $gte: dayStart, $lt: dayEnd } } },
@@ -41,6 +54,7 @@ const computeCashActivity = async (dayStart) => {
 
   return {
     cashCollections: Math.max(collectedAgg[0]?.total || 0, 0),
+    cashRefunds: cashRefundAgg[0]?.total || 0,
     cashExpenses: expenseAgg[0]?.total || 0,
   };
 };
@@ -51,15 +65,18 @@ const resolveOpeningCash = async (dayStart) => {
   return prevClosing ? prevClosing.actualClosingCash ?? prevClosing.expectedClosingCash : 0;
 };
 
+const computeExpectedClosingCash = (openingCash, cashCollections, cashRefunds, cashExpenses) =>
+  Math.round((openingCash + cashCollections - cashRefunds - cashExpenses) * 100) / 100;
+
 // @desc  Live preview of today's (or any day's) expected cash position without persisting anything
 // @route GET /api/finance/cash-closing/preview?date=2026-07-21
 const previewClosing = asyncHandler(async (req, res) => {
   const dayStart = CashClosing.normalizeDate(req.query.date ? new Date(req.query.date) : new Date());
-  const [{ cashCollections, cashExpenses }, openingCash] = await Promise.all([
+  const [{ cashCollections, cashRefunds, cashExpenses }, openingCash] = await Promise.all([
     computeCashActivity(dayStart),
     resolveOpeningCash(dayStart),
   ]);
-  const expectedClosingCash = Math.round((openingCash + cashCollections - cashExpenses) * 100) / 100;
+  const expectedClosingCash = computeExpectedClosingCash(openingCash, cashCollections, cashRefunds, cashExpenses);
 
   const existing = await CashClosing.findOne({ date: dayStart });
 
@@ -69,6 +86,7 @@ const previewClosing = asyncHandler(async (req, res) => {
       date: dayStart,
       openingCash,
       cashCollections,
+      cashRefunds,
       cashExpenses,
       expectedClosingCash,
       status: existing?.status || 'draft',
@@ -127,11 +145,11 @@ const closeDrawer = asyncHandler(async (req, res) => {
 
   const dayStart = CashClosing.normalizeDate(date ? new Date(date) : new Date());
 
-  const [{ cashCollections, cashExpenses }, openingCash] = await Promise.all([
+  const [{ cashCollections, cashRefunds, cashExpenses }, openingCash] = await Promise.all([
     computeCashActivity(dayStart),
     resolveOpeningCash(dayStart),
   ]);
-  const expectedClosingCash = Math.round((openingCash + cashCollections - cashExpenses) * 100) / 100;
+  const expectedClosingCash = computeExpectedClosingCash(openingCash, cashCollections, cashRefunds, cashExpenses);
   const variance = Math.round((Number(actualClosingCash) - expectedClosingCash) * 100) / 100;
 
   if (variance !== 0 && !varianceReason) {
@@ -145,6 +163,7 @@ const closeDrawer = asyncHandler(async (req, res) => {
     date: dayStart,
     openingCash,
     cashCollections,
+    cashRefunds,
     cashExpenses,
     expectedClosingCash,
     actualClosingCash: Number(actualClosingCash),
@@ -178,7 +197,8 @@ const closeDrawer = asyncHandler(async (req, res) => {
     module: 'finance',
     targetId: closing._id,
     description:
-      `Closed cash drawer for ${dayStart.toDateString()}: expected ${expectedClosingCash.toFixed(2)}, ` +
+      `Closed cash drawer for ${dayStart.toDateString()}: expected ${expectedClosingCash.toFixed(2)} ` +
+      `(collections ${cashCollections.toFixed(2)}, refunds -${cashRefunds.toFixed(2)}, expenses -${cashExpenses.toFixed(2)}), ` +
       `actual ${Number(actualClosingCash).toFixed(2)}, variance ${variance.toFixed(2)}` +
       (variance !== 0 ? ` (${varianceReason})` : ''),
   });
@@ -222,4 +242,12 @@ const reopenClosing = asyncHandler(async (req, res) => {
   res.json({ success: true, data: closing });
 });
 
-module.exports = { previewClosing, listClosings, closeDrawer, reopenClosing, computeCashActivity, resolveOpeningCash };
+module.exports = {
+  previewClosing,
+  listClosings,
+  closeDrawer,
+  reopenClosing,
+  computeCashActivity,
+  resolveOpeningCash,
+  computeExpectedClosingCash,
+};

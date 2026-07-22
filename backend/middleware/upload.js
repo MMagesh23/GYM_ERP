@@ -1,4 +1,5 @@
 const multer = require('multer');
+const { fileTypeFromBuffer } = require('file-type');
 const ApiError = require('../utils/ApiError');
 
 // Memory storage: buffers are handed off to Cloudinary (photos) or ExcelJS (imports).
@@ -37,4 +38,46 @@ const uploadPhoto = multer({ storage, fileFilter: imageFilter, limits: { fileSiz
 const uploadSpreadsheet = multer({ storage, fileFilter: spreadsheetFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 const uploadDocument = multer({ storage, fileFilter: documentFilter, limits: { fileSize: 8 * 1024 * 1024 } });
 
-module.exports = { uploadPhoto, uploadSpreadsheet, uploadDocument };
+// FIX (P1 — upload security): multer's fileFilter only sees the client-declared
+// mimetype/extension, both of which are trivially spoofed (rename a .html or
+// .svg-with-script file to .jpg). These middlewares run AFTER multer has
+// buffered the file and inspect the actual file bytes (magic numbers) before
+// the request reaches the controller, so a mislabeled file is rejected
+// regardless of what the client claimed. Chain them after the relevant
+// uploadX.single(...) call in each route, e.g.:
+//   router.post('/', uploadPhoto.single('photo'), verifyImageBuffer, createEquipment)
+
+const verifyImageBuffer = async (req, res, next) => {
+  if (!req.file) return next();
+  try {
+    const detected = await fileTypeFromBuffer(req.file.buffer);
+    if (!detected || !detected.mime.startsWith('image/')) {
+      return next(new ApiError(400, "The uploaded file's content does not match a supported image format."));
+    }
+    next();
+  } catch (err) {
+    next(new ApiError(400, 'Could not verify the uploaded file.'));
+  }
+};
+
+const verifyDocumentBuffer = async (req, res, next) => {
+  if (!req.file) return next();
+  try {
+    const detected = await fileTypeFromBuffer(req.file.buffer);
+    const allowedMimes = ['application/pdf'];
+    if (!detected || !(detected.mime.startsWith('image/') || allowedMimes.includes(detected.mime))) {
+      return next(new ApiError(400, "The uploaded file's content does not match an image or PDF format."));
+    }
+    next();
+  } catch (err) {
+    next(new ApiError(400, 'Could not verify the uploaded file.'));
+  }
+};
+
+module.exports = {
+  uploadPhoto,
+  uploadSpreadsheet,
+  uploadDocument,
+  verifyImageBuffer,
+  verifyDocumentBuffer,
+};

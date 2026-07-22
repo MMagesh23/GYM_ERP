@@ -4,7 +4,7 @@ const { can } = require('../middleware/rbac');
 const { requireFeature } = require('../middleware/featureGate');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { uploadPhoto } = require('../middleware/upload');
+const { uploadPhoto, verifyImageBuffer } = require('../middleware/upload');
 const {
   listEquipment,
   getEquipment,
@@ -27,13 +27,14 @@ const equipmentValidation = [
   body('category').notEmpty().withMessage('Category is required'),
 ];
 
+
 router.get('/export', protect, can('equipment', 'export'), exportEquipment);
 router.get('/warranty-alerts', protect, can('equipment', 'view'), warrantyAlerts);
 
 router.get('/', protect, can('equipment', 'view'), listEquipment);
 router.get('/:id', protect, can('equipment', 'view'), getEquipment);
-router.post('/', protect, can('equipment', 'create'), uploadPhoto.single('photo'), equipmentValidation, validate, createEquipment);
-router.put('/:id', protect, can('equipment', 'update'), uploadPhoto.single('photo'), updateEquipment);
+router.post('/', protect, can('equipment', 'create'), uploadPhoto.single('photo'), verifyImageBuffer, equipmentValidation, validate, createEquipment);
+router.put('/:id', protect, can('equipment', 'update'), uploadPhoto.single('photo'), verifyImageBuffer, updateEquipment);
 // FIX (security): status changes previously had no can() check — any authenticated
 // user could flip equipment status regardless of assigned Role permissions.
 router.patch('/:id/status', protect, can('equipment', 'update'), changeStatus);

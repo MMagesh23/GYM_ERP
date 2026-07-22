@@ -12,6 +12,12 @@ const { streamInvoicePdf } = require('../utils/generateInvoicePdf');
 const { validateRefundAmount, summarizeMembershipBilling } = require('../utils/billing');
 const { buildSort } = require('../utils/sorting');
 const { DEFAULT_PAYMENT_METHODS } = require('../utils/paymentMethods');
+// FIX (P1): reuse the same closed-cash-day guard expenseController already
+// uses. Previously payments/refunds had no such check at all, so a cash
+// payment or refund could be silently backdated into an already-closed day,
+// desyncing it from the locked CashClosing snapshot — exactly the scenario
+// assertDateEditable exists to prevent for expenses.
+const { assertDateEditable } = require('../utils/cashLock');
 
 const PAYMENT_SORT_FIELDS = ['paymentDate', 'finalAmount', 'status'];
 
@@ -45,6 +51,12 @@ const createPayment = asyncHandler(async (req, res) => {
   }
 
   await validatePaymentMethod(paymentMethod);
+
+  // FIX (P1): a payment recorded today always affects TODAY's cash position
+  // (paymentDate defaults to now), so guard against today being an
+  // already-closed day. Non-admins are blocked outright; an admin override
+  // is allowed but explicitly audit-logged below, mirroring expenseController.
+  const closing = await assertDateEditable(new Date(), { isAdmin: req.user.role === 'admin' });
 
   const member = await Member.findById(memberId);
   if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
@@ -200,7 +212,8 @@ const createPayment = asyncHandler(async (req, res) => {
       `Recorded payment ${invoiceNumber} for member ${member.memberId} (${finalAmount})` +
       (resolvedStatus === 'partial'
         ? ` — ${resolvedAmountPaid} collected, ${(finalAmount - resolvedAmountPaid).toFixed(2)} outstanding`
-        : ''),
+        : '') +
+      (closing ? ` [ADMIN OVERRIDE: recorded into a closed cash day, ${closing.date.toDateString()}]` : ''),
   });
 
   res.status(201).json({ success: true, data: payment });
@@ -304,6 +317,12 @@ const refundPayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id);
   if (!payment) throw new ApiError(404, 'Payment not found.');
 
+  // FIX (P1): a refund issued today affects TODAY's cash position (its
+  // refund.refundDate is set to now, below) regardless of when the original
+  // payment happened — guard against today being an already-closed day, same
+  // pattern as createPayment above.
+  const closing = await assertDateEditable(new Date(), { isAdmin: req.user.role === 'admin' });
+
   const refundAmount = Number(amount);
   const check = validateRefundAmount(payment, refundAmount);
   if (!check.valid) throw new ApiError(400, check.message);
@@ -326,7 +345,9 @@ const refundPayment = asyncHandler(async (req, res) => {
     action: 'update',
     module: 'payments',
     targetId: payment._id,
-    description: `Refunded ${refundAmount} on payment ${payment.invoiceNumber}: ${reason || 'no reason given'}`,
+    description:
+      `Refunded ${refundAmount} on payment ${payment.invoiceNumber}: ${reason || 'no reason given'}` +
+      (closing ? ` [ADMIN OVERRIDE: refunded into a closed cash day, ${closing.date.toDateString()}]` : ''),
   });
 
   res.json({ success: true, data: payment });

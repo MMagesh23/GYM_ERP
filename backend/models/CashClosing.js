@@ -9,10 +9,17 @@ const cashClosingSchema = new mongoose.Schema(
 
     openingCash: { type: Number, required: true, default: 0 }, // = previous day's actualClosingCash (or 0 on day 1)
 
-    cashCollections: { type: Number, required: true, default: 0 }, // sum of cash-method payments collected today
+    cashCollections: { type: Number, required: true, default: 0 }, // sum of cash-method payments MADE today
+    // FIX: refunds paid back out in CASH are tracked separately from
+    // collections, attributed to the day the refund itself happened — not the
+    // day of the original payment. A cash refund issued today against a
+    // payment from an already-closed prior day would otherwise be invisible
+    // to today's till reconciliation and produce an unexplained shortfall.
+    cashRefunds: { type: Number, required: true, default: 0 },
     cashExpenses: { type: Number, required: true, default: 0 },    // sum of cash-method expenses today
 
-    expectedClosingCash: { type: Number, required: true, default: 0 }, // openingCash + cashCollections - cashExpenses
+    // expectedClosingCash = openingCash + cashCollections - cashRefunds - cashExpenses
+    expectedClosingCash: { type: Number, required: true, default: 0 },
     actualClosingCash: { type: Number },   // entered by staff at close time
     variance: { type: Number },            // actualClosingCash - expectedClosingCash
 

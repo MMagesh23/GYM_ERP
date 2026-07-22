@@ -106,7 +106,11 @@ const CashClosingPage = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* FIX: added the "Cash Refunds" line — previously refunds issued in
+              cash were silently excluded from this breakdown even though the
+              backend now subtracts them from expectedClosingCash, which made
+              the total look unexplained without this line. */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
             <div>
               <p className="text-xs text-gray-400">Opening Cash</p>
               <p className="text-lg font-semibold">{formatCurrency(preview.openingCash)}</p>
@@ -114,6 +118,10 @@ const CashClosingPage = () => {
             <div>
               <p className="text-xs text-gray-400">+ Cash Collected</p>
               <p className="text-lg font-semibold text-green-600 dark:text-green-400">{formatCurrency(preview.cashCollections)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">− Cash Refunds</p>
+              <p className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(preview.cashRefunds)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400">− Cash Expenses</p>
@@ -198,7 +206,7 @@ const CashClosingPage = () => {
       <h3 className="mb-3 text-sm font-semibold">Closing History</h3>
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
         {historyLoading ? (
-          <SkeletonTable rows={6} cols={6} />
+          <SkeletonTable rows={6} cols={7} />
         ) : history.length === 0 ? (
           <EmptyState icon={Lock} title="No closings recorded yet" description="Close today's drawer to start building history." />
         ) : (
@@ -207,6 +215,7 @@ const CashClosingPage = () => {
               <tr>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Opening</th>
+                <th className="px-4 py-3">Refunds</th>
                 <th className="px-4 py-3">Expected</th>
                 <th className="px-4 py-3">Actual</th>
                 <th className="px-4 py-3">Variance</th>
@@ -218,6 +227,7 @@ const CashClosingPage = () => {
                 <tr key={h._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-4 py-3 font-medium">{formatDate(h.date)}</td>
                   <td className="px-4 py-3">{formatCurrency(h.openingCash)}</td>
+                  <td className="px-4 py-3 text-red-600 dark:text-red-400">{formatCurrency(h.cashRefunds)}</td>
                   <td className="px-4 py-3">{formatCurrency(h.expectedClosingCash)}</td>
                   <td className="px-4 py-3">{formatCurrency(h.actualClosingCash)}</td>
                   <td

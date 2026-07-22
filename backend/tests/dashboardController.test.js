@@ -25,8 +25,25 @@ jest.mock('../models/Membership', () => ({
 
 jest.mock('../models/MembershipPlan', () => ({}));
 
+// FIX: previously a single static mockResolvedValue returned the SAME
+// {total: 1000} result for every Payment.aggregate call — but
+// dashboardController.summary() calls Payment.aggregate TWICE (gross revenue,
+// then refunds, per the gross-minus-refunds accounting model in
+// utils/financeCalculations.js). With one shared value, the refunds query
+// picked up the same total as the gross query, silently netting revenue to
+// zero and profit negative — a bug in this test file, not in the controller.
+// This now inspects the pipeline's $match stage to tell the two queries
+// apart, the same way the real aggregation distinguishes them.
 jest.mock('../models/Payment', () => ({
-  aggregate: jest.fn().mockResolvedValue([{ _id: 1, total: 1000 }, { _id: 2, total: 2000 }]),
+  aggregate: jest.fn((pipeline) => {
+    const matchStage = pipeline.find((s) => s.$match)?.$match || {};
+    const isRefundQuery = Object.prototype.hasOwnProperty.call(matchStage, 'refund.refundDate');
+    if (isRefundQuery) {
+      // No refunds in this fixture, so net revenue should equal gross revenue.
+      return Promise.resolve([]);
+    }
+    return Promise.resolve([{ _id: 1, total: 1000 }, { _id: 2, total: 2000 }]);
+  }),
 }));
 
 jest.mock('../models/Expense', () => ({
