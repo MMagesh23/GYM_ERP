@@ -13,6 +13,7 @@ const MODULES = [
   'reports',
   'settings',
   'auditLogs',
+  'finance', // NEW: finance dashboard + daily cash closing
 ];
 
 const permissionSchema = new mongoose.Schema(

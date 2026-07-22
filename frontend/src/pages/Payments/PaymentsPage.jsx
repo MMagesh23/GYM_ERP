@@ -16,7 +16,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { formatCurrency, billingStatusMeta } from '../../utils/memberHelpers';
 
 const STATUS_OPTIONS = ['paid', 'pending', 'partial', 'refunded', 'partially_refunded', 'failed'];
-const METHOD_OPTIONS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
+const DEFAULT_PAYMENT_METHODS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
 const SORT_OPTIONS = [
   { value: '', label: 'Newest first' },
   { value: 'paymentDate:asc', label: 'Oldest first' },
@@ -27,6 +27,8 @@ const SORT_OPTIONS = [
 
 const PaymentsPage = () => {
   const { user } = useSelector((state) => state.auth);
+  const { data: settings } = useSelector((state) => state.settings);
+  const METHOD_OPTIONS = settings?.paymentMethods?.length ? settings.paymentMethods : DEFAULT_PAYMENT_METHODS;
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get('tab') === 'dues' ? 'dues' : 'payments');
 

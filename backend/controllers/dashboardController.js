@@ -1,5 +1,11 @@
 const { resolveAllowedWidgets, pickFields } = require('../utils/dashboardWidgets');
 const Settings = require('../models/Settings');
+const {
+  grossRevenueMatchStage,
+  refundMatchStage,
+  GROSS_COLLECTED_EXPR,
+  round2,
+} = require('../utils/financeCalculations');
 
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
@@ -26,7 +32,8 @@ const summary = asyncHandler(async (req, res) => {
     activeMembers,
     expiredMembers,
     newMembersThisMonth,
-    monthlyRevenueAgg,
+    monthlyGrossRevenueAgg,
+    monthlyRefundsAgg,
     monthlyExpenseAgg,
     equipmentCount,
     expiringMemberships,
@@ -36,9 +43,18 @@ const summary = asyncHandler(async (req, res) => {
     Member.countDocuments({ isDeleted: false, status: 'active' }),
     Member.countDocuments({ isDeleted: false, status: 'expired' }),
     Member.countDocuments({ isDeleted: false, joiningDate: { $gte: monthStart, $lt: nextMonthStart } }),
+    // FIX: previously matched status $in ['paid','partial'] BEFORE summing,
+    // which excluded the ENTIRE amount of any payment later touched by a
+    // refund (status becomes 'refunded'/'partially_refunded'). Now sums gross
+    // collections across all money-was-collected statuses, and subtracts
+    // refunds separately below — see utils/financeCalculations.js.
     Payment.aggregate([
-      { $match: { paymentDate: { $gte: monthStart, $lt: nextMonthStart }, status: { $in: ['paid', 'partial'] } } },
-      { $group: { _id: null, total: { $sum: '$finalAmount' } } },
+      grossRevenueMatchStage('paymentDate', monthStart, nextMonthStart),
+      { $group: { _id: null, total: { $sum: GROSS_COLLECTED_EXPR } } },
+    ]),
+    Payment.aggregate([
+      refundMatchStage(monthStart, nextMonthStart),
+      { $group: { _id: null, total: { $sum: '$refund.refundedAmount' } } },
     ]),
     Expense.aggregate([
       { $match: { expenseDate: { $gte: monthStart, $lt: nextMonthStart } } },
@@ -46,12 +62,9 @@ const summary = asyncHandler(async (req, res) => {
     ]),
     Equipment.countDocuments({ status: { $ne: 'retired' } }),
     Membership.countDocuments({ status: 'active', endDate: { $gte: now, $lte: soon } }),
-    // FIX: previously only summed Payment records with status='pending', which
-    // missed the outstanding remainder of 'partial' payments entirely, and — more
-    // importantly — missed memberships with NO Payment record at all, which is the
-    // normal state right after a membership is assigned/renewed/changed (nothing
-    // auto-creates a payment for it). This aggregates the real number: for every
-    // live (active/frozen) membership, invoiced minus actually-collected.
+    // Every live (active/frozen) membership that still has money owed on it —
+    // invoiced minus actually-collected, net of refunds. Nothing auto-bills a
+    // membership, so this is the only place that surfaces "who owes what".
     Membership.aggregate([
       { $match: { status: { $in: ['active', 'frozen'] } } },
       { $lookup: { from: 'payments', localField: '_id', foreignField: 'membership', as: 'pmts' } },
@@ -84,7 +97,9 @@ const summary = asyncHandler(async (req, res) => {
     ]),
   ]);
 
-  const monthlyRevenue = monthlyRevenueAgg[0]?.total || 0;
+  const monthlyGrossRevenue = monthlyGrossRevenueAgg[0]?.total || 0;
+  const monthlyRefunds = round2(monthlyRefundsAgg[0]?.total || 0);
+  const monthlyRevenue = round2(monthlyGrossRevenue - monthlyRefunds); // net revenue, now correct
   const monthlyExpenses = monthlyExpenseAgg[0]?.total || 0;
   const pendingPayments = pendingPaymentsAgg[0]?.total || 0;
   const pendingPaymentsCount = pendingPaymentsAgg[0]?.count || 0;
@@ -95,8 +110,9 @@ const summary = asyncHandler(async (req, res) => {
     expiredMembers,
     newMembersThisMonth,
     monthlyRevenue,
+    monthlyRefunds,
     monthlyExpenses,
-    netProfit: monthlyRevenue - monthlyExpenses,
+    netProfit: round2(monthlyRevenue - monthlyExpenses),
     equipmentCount,
     membershipsExpiringSoon: expiringMemberships,
     pendingPayments,
@@ -117,10 +133,15 @@ const charts = asyncHandler(async (req, res) => {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
 
-  const [revenueByMonth, expenseByMonth, membershipGrowth, planDistribution] = await Promise.all([
+  const [grossByMonth, refundByMonth, expenseByMonth, membershipGrowth, planDistribution] = await Promise.all([
+    // FIX: same gross-minus-refunds correction as summary() above.
     Payment.aggregate([
-      { $match: { paymentDate: { $gte: start, $lt: end }, status: { $in: ['paid', 'partial'] } } },
-      { $group: { _id: { $month: '$paymentDate' }, total: { $sum: '$finalAmount' } } },
+      grossRevenueMatchStage('paymentDate', start, end),
+      { $group: { _id: { $month: '$paymentDate' }, total: { $sum: GROSS_COLLECTED_EXPR } } },
+    ]),
+    Payment.aggregate([
+      refundMatchStage(start, end),
+      { $group: { _id: { $month: '$refund.refundDate' }, total: { $sum: '$refund.refundedAmount' } } },
     ]),
     Expense.aggregate([
       { $match: { expenseDate: { $gte: start, $lt: end } } },
@@ -144,9 +165,11 @@ const charts = asyncHandler(async (req, res) => {
       [key]: agg.find((a) => a._id === i + 1)?.[key] || 0,
     }));
 
-  const revenue = monthly(revenueByMonth);
+  const grossRevenue = monthly(grossByMonth);
+  const refunds = monthly(refundByMonth);
+  const revenue = grossRevenue.map((r, i) => ({ month: r.month, total: round2(r.total - refunds[i].total) }));
   const expenses = monthly(expenseByMonth);
-  const profitByMonth = revenue.map((r, i) => ({ month: r.month, profit: r.total - expenses[i].total }));
+  const profitByMonth = revenue.map((r, i) => ({ month: r.month, profit: round2(r.total - expenses[i].total) }));
 
   const chartData = {
     revenueByMonth: revenue,

@@ -4,13 +4,14 @@
   "description": "Gym Management ERP - Backend API (Node.js, Express, MongoDB)",
   "main": "server.js",
   "type": "commonjs",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "seed": "node utils/seed.js",
-    "test": "jest",
-    "migrate:amount-paid": "node utils/migrateAmountPaid.js"
-  },
+"scripts": {
+  "start": "node server.js",
+  "dev": "nodemon server.js",
+  "seed": "node utils/seed.js",
+  "test": "jest",
+  "migrate:amount-paid": "node utils/migrateAmountPaid.js",
+  "migrate:finance-permission": "node utils/migrateFinancePermission.js"
+},
   "dependencies": {
     "express": "^4.19.2",
     "mongoose": "^8.4.0",

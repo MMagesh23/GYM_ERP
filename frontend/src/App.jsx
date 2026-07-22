@@ -19,7 +19,9 @@ import StaffPage from './pages/Staff/StaffPage';
 import ReportsPage from './pages/Reports/ReportsPage';
 import AuditLogsPage from './pages/AuditLogs/AuditLogsPage';
 import SettingsPage from './pages/Settings/SettingsPage';
-import { fetchCurrentUser } from './redux/slices/authSlice';
+import FinanceDashboardPage from './pages/Finance/FinanceDashboardPage';
+import CashClosingPage from './pages/Finance/CashClosingPage';
+import { restoreSession } from './redux/slices/authSlice';
 import { fetchSettings } from './redux/slices/settingsSlice';
 
 function App() {
@@ -27,8 +29,17 @@ function App() {
   const { data: settings } = useSelector((state) => state.settings);
 
   useEffect(() => {
-    dispatch(fetchCurrentUser());
-    dispatch(fetchSettings());
+    const initializeApp = async () => {
+      try {
+        await dispatch(restoreSession()).unwrap();
+      } catch {
+        // Session restore is best-effort; the app can still render the login route.
+      } finally {
+        dispatch(fetchSettings());
+      }
+    };
+
+    initializeApp();
   }, [dispatch]);
 
   // Dynamically apply favicon + document title once branding settings load
@@ -73,6 +84,13 @@ function App() {
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/equipment" element={<EquipmentPage />} />
             <Route path="/equipment/:id" element={<EquipmentDetailPage />} />
+
+            {/* Finance: view is RBAC-gated server-side per user's permission
+                matrix (finance.view); closing the cash drawer is gated
+                server-side on finance.update. No route-level role restriction
+                here so a receptionist granted finance.view can still see it. */}
+            <Route path="/finance" element={<FinanceDashboardPage />} />
+            <Route path="/finance/cash-closing" element={<CashClosingPage />} />
 
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/membership-plans" element={<PlansPage />} />

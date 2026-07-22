@@ -19,10 +19,19 @@ const run = async () => {
       name: 'Receptionist',
       description: 'Limited operational access',
       isSystemRole: true,
-      permissions: Role.MODULES.filter((m) => m !== 'settings' && m !== 'auditLogs').map((m) => ({
-        module: m,
-        actions: { view: true, create: true, update: true, delete: false, export: false },
-      })),
+      permissions: [
+        // Standard modules: view/create/update, no delete/export
+        ...Role.MODULES.filter((m) => !['settings', 'auditLogs', 'finance'].includes(m)).map((m) => ({
+          module: m,
+          actions: { view: true, create: true, update: true, delete: false, export: false },
+        })),
+        // FIX: finance is sensitive (cash closing is an irreversible, financially
+        // binding action) — receptionist can VIEW the finance dashboard and cash
+        // closing history but cannot close the drawer or edit financial records.
+        // Only admin (bypasses can() checks) or a custom role explicitly granted
+        // finance.update can close a day.
+        { module: 'finance', actions: { view: true, create: false, update: false, delete: false, export: false } },
+      ],
     },
   ];
 

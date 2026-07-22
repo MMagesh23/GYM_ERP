@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, CreditCard, Wallet, Dumbbell, UserCog, BarChart3,
   ClipboardList, ShieldCheck, Settings as SettingsIcon, Sun, Moon, LogOut,
-  Menu, X, ChevronsLeft, ChevronsRight, ChevronDown, Search,
+  Menu, X, ChevronsLeft, ChevronsRight, ChevronDown, Search, PiggyBank,
 } from 'lucide-react';
 import { toggleTheme, toggleSidebar } from '../../redux/slices/uiSlice';
 import { logoutUser } from '../../redux/slices/authSlice';
@@ -16,6 +16,10 @@ const NAV_ITEMS = [
   { to: '/members', label: 'Members', icon: Users, roles: ['admin', 'receptionist'] },
   { to: '/membership-plans', label: 'Plans', icon: ClipboardList, roles: ['admin'] },
   { to: '/payments', label: 'Payments', icon: CreditCard, roles: ['admin', 'receptionist'] },
+  // NEW — Finance dashboard + cash closing. View access is further narrowed
+  // server-side per the user's finance permission (RBAC), same pattern as
+  // every other nav item's feature/role gate.
+  { to: '/finance', label: 'Finance', icon: PiggyBank, roles: ['admin', 'receptionist'], feature: 'financeModule' },
   { to: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin'], feature: 'financeModule' },
   { to: '/equipment', label: 'Equipment', icon: Dumbbell, roles: ['admin', 'receptionist'], feature: 'equipmentModule' },
   { to: '/staff', label: 'Staff', icon: UserCog, roles: ['admin'] },

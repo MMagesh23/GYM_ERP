@@ -4,9 +4,13 @@ import { reportApi } from '../../services/reportApi';
 const REPORTS = [
   { key: 'members', label: 'Member Report', description: 'All members with contact info, status, and join date.' },
   { key: 'memberships', label: 'Membership Report', description: 'Every membership record with plan, dates, and amount.' },
-  { key: 'payments', label: 'Payment Report', description: 'All recorded payments with method and status.' },
+  { key: 'payments', label: 'Payment Report', description: 'All recorded payments with collected/refunded breakdown and status.' },
   { key: 'expenses', label: 'Expense Report', description: 'All expenses by category, vendor, and date.' },
-  { key: 'profit', label: 'Profit Report', description: 'Monthly revenue, expenses, and net profit for the current year.', pdf: true },
+  { key: 'profit', label: 'Profit & Loss Report', description: 'Monthly gross revenue, refunds, net revenue, expenses, and profit.', pdf: true },
+  // NEW — finance reports
+  { key: 'cash-flow', label: 'Cash Flow Report', description: 'Monthly gross revenue, refunds, net revenue, expenses, and net cash flow.' },
+  { key: 'revenue-by-method', label: 'Revenue by Payment Method', description: 'Collections broken down by cash, UPI, card, and other methods.' },
+  { key: 'revenue-by-plan', label: 'Revenue by Membership Plan', description: 'Which membership plans are actually driving revenue.' },
   { key: 'equipment', label: 'Equipment Report', description: 'All equipment with status, cost, and location.' },
   { key: 'staff', label: 'Staff Report', description: 'All staff with designation, salary, and status.' },
 ];

@@ -17,6 +17,11 @@ const settingsSchema = new mongoose.Schema(
     gstNumber: { type: String, default: '' },
     panNumber: { type: String, default: '' },
 
+    paymentMethods: {
+      type: [String],
+      default: ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'],
+    },
+
     currencySymbol: { type: String, default: '₹' },
     currencyCode: { type: String, default: 'INR' },
     timeZone: { type: String, default: 'Asia/Kolkata' },

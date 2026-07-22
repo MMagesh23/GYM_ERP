@@ -9,6 +9,13 @@ const Staff = require('../models/Staff');
 const Settings = require('../models/Settings');
 const asyncHandler = require('../utils/asyncHandler');
 const { registerFonts } = require('../utils/pdfFonts');
+const {
+  grossRevenueMatchStage,
+  refundMatchStage,
+  GROSS_COLLECTED_EXPR,
+  round2,
+} = require('../utils/financeCalculations');
+const { computeRevenueByPlan } = require('./financeController');
 
 // Writes a workbook to the response as .xlsx or .csv depending on the `format` query param
 const sendWorkbook = async (res, workbook, filenameBase, format) => {
@@ -104,6 +111,8 @@ const paymentReport = asyncHandler(async (req, res) => {
       { header: 'Invoice #', key: 'invoiceNumber', width: 16 },
       { header: 'Member', key: 'member', width: 24 },
       { header: 'Amount', key: 'finalAmount', width: 12 },
+      { header: 'Collected', key: 'amountPaid', width: 12 },
+      { header: 'Refunded', key: 'refunded', width: 12 },
       { header: 'Method', key: 'paymentMethod', width: 14 },
       { header: 'Status', key: 'status', width: 12 },
       { header: 'Date', key: 'date', width: 14 },
@@ -112,6 +121,8 @@ const paymentReport = asyncHandler(async (req, res) => {
       invoiceNumber: p.invoiceNumber,
       member: p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '',
       finalAmount: p.finalAmount,
+      amountPaid: p.amountPaid ?? p.finalAmount,
+      refunded: p.refund?.refundedAmount || 0,
       paymentMethod: p.paymentMethod,
       status: p.status,
       date: p.paymentDate?.toISOString().slice(0, 10),
@@ -146,15 +157,29 @@ const expenseReport = asyncHandler(async (req, res) => {
   await sendWorkbook(res, workbook, 'expense-report', req.query.format);
 });
 
-// Shared monthly profit calculation, reused by both the Excel and PDF profit reports
+// Shared monthly profit calculation, reused by the Excel/CSV/PDF profit
+// reports AND the cash-flow report below.
+//
+// FIX: previously summed Payment.finalAmount filtered on status $in
+// ['paid','partial'] BEFORE summing — which excluded the ENTIRE amount of any
+// payment later touched by a refund (status flips to 'refunded' /
+// 'partially_refunded' the moment ANY refund is issued on it), not just the
+// refunded portion. This under-stated revenue and profit for any month with a
+// partial refund. Now computes gross collections and refunds as two separate,
+// correctly-dated aggregations (see utils/financeCalculations.js) and nets
+// them, matching the same accounting model used by the Finance Dashboard.
 const computeMonthlyProfit = async (year) => {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
 
-  const [revenueAgg, expenseAgg] = await Promise.all([
+  const [grossAgg, refundAgg, expenseAgg] = await Promise.all([
     Payment.aggregate([
-      { $match: { paymentDate: { $gte: start, $lt: end }, status: { $in: ['paid', 'partial'] } } },
-      { $group: { _id: { $month: '$paymentDate' }, total: { $sum: '$finalAmount' } } },
+      grossRevenueMatchStage('paymentDate', start, end),
+      { $group: { _id: { $month: '$paymentDate' }, total: { $sum: GROSS_COLLECTED_EXPR } } },
+    ]),
+    Payment.aggregate([
+      refundMatchStage(start, end),
+      { $group: { _id: { $month: '$refund.refundDate' }, total: { $sum: '$refund.refundedAmount' } } },
     ]),
     Expense.aggregate([
       { $match: { expenseDate: { $gte: start, $lt: end } } },
@@ -164,9 +189,18 @@ const computeMonthlyProfit = async (year) => {
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return MONTHS.map((label, idx) => {
-    const revenue = revenueAgg.find((r) => r._id === idx + 1)?.total || 0;
+    const gross = grossAgg.find((r) => r._id === idx + 1)?.total || 0;
+    const refunds = refundAgg.find((r) => r._id === idx + 1)?.total || 0;
+    const revenue = round2(gross - refunds); // net revenue
     const expense = expenseAgg.find((e) => e._id === idx + 1)?.total || 0;
-    return { month: label, revenue, expense, profit: revenue - expense };
+    return {
+      month: label,
+      grossRevenue: round2(gross),
+      refunds: round2(refunds),
+      revenue,
+      expense,
+      profit: round2(revenue - expense),
+    };
   });
 };
 
@@ -182,7 +216,9 @@ const profitReport = asyncHandler(async (req, res) => {
     'Profit',
     [
       { header: 'Month', key: 'month', width: 10 },
-      { header: 'Revenue', key: 'revenue', width: 14 },
+      { header: 'Gross Revenue', key: 'grossRevenue', width: 16 },
+      { header: 'Refunds', key: 'refunds', width: 14 },
+      { header: 'Net Revenue', key: 'revenue', width: 14 },
       { header: 'Expenses', key: 'expense', width: 14 },
       { header: 'Profit', key: 'profit', width: 14 },
     ],
@@ -199,37 +235,47 @@ const profitReportPdf = asyncHandler(async (req, res) => {
   const settings = await Settings.getSingleton();
   const currency = settings.currencySymbol || '₹';
 
+  const totalGross = rows.reduce((s, r) => s + r.grossRevenue, 0);
+  const totalRefunds = rows.reduce((s, r) => s + r.refunds, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const totalExpense = rows.reduce((s, r) => s + r.expense, 0);
 
-  const doc = new PDFDocument({ size: 'A4', margin: 50 });
-  // FIX: register a Unicode font so the ₹ currency symbol (and any other
-  // non-Latin-1 characters in gymName, etc.) render correctly instead of a
-  // missing-glyph box — same root cause as generateInvoicePdf.js.
+  const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' });
+  // Landscape + register a Unicode font so the ₹ currency symbol (and any other
+  // non-Latin-1 characters in gymName, etc.) render correctly, and the wider
+  // 6-column layout (gross/refunds/net/expense/profit) has room to breathe.
   const font = registerFonts(doc);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="profit-report-${year}.pdf"`);
   doc.pipe(res);
 
-  doc.fontSize(18).font(font.bold).text(`${settings.gymName} — Profit Report ${year}`);
+  doc.fontSize(18).font(font.bold).text(`${settings.gymName} — Profit & Loss Report ${year}`);
+  doc.fontSize(9).font(font.regular).fillColor('#666').text(
+    'Net Revenue = Gross Collected − Refunds Issued (attributed to when the refund occurred). Profit = Net Revenue − Expenses.'
+  );
+  doc.fillColor('#000');
   doc.moveDown(1);
 
-  const col = { month: 50, revenue: 200, expense: 320, profit: 440 };
+  const col = { month: 40, gross: 140, refunds: 250, revenue: 360, expense: 470, profit: 580 };
   let y = doc.y;
   doc.fontSize(10).font(font.bold);
   doc.text('Month', col.month, y);
-  doc.text('Revenue', col.revenue, y);
+  doc.text('Gross Revenue', col.gross, y);
+  doc.text('Refunds', col.refunds, y);
+  doc.text('Net Revenue', col.revenue, y);
   doc.text('Expenses', col.expense, y);
   doc.text('Profit', col.profit, y);
   y += 18;
-  doc.moveTo(50, y).lineTo(545, y).strokeColor('#ddd').stroke();
+  doc.moveTo(40, y).lineTo(755, y).strokeColor('#ddd').stroke();
   y += 8;
 
   doc.font(font.regular).fontSize(10);
   rows.forEach((r) => {
-    doc.text(r.month, col.month, y);
-    doc.text(`${currency}${r.revenue.toFixed(2)}`, col.revenue, y);
+    doc.fillColor('#000').text(r.month, col.month, y);
+    doc.text(`${currency}${r.grossRevenue.toFixed(2)}`, col.gross, y);
+    doc.fillColor(r.refunds > 0 ? '#b91c1c' : '#999').text(r.refunds > 0 ? `-${currency}${r.refunds.toFixed(2)}` : '—', col.refunds, y);
+    doc.fillColor('#000').text(`${currency}${r.revenue.toFixed(2)}`, col.revenue, y);
     doc.text(`${currency}${r.expense.toFixed(2)}`, col.expense, y);
     doc.fillColor(r.profit >= 0 ? '#166534' : '#b91c1c').text(`${currency}${r.profit.toFixed(2)}`, col.profit, y);
     doc.fillColor('#000');
@@ -237,13 +283,16 @@ const profitReportPdf = asyncHandler(async (req, res) => {
   });
 
   y += 8;
-  doc.moveTo(50, y).lineTo(545, y).strokeColor('#ddd').stroke();
+  doc.moveTo(40, y).lineTo(755, y).strokeColor('#ddd').stroke();
   y += 10;
   doc.font(font.bold);
   doc.text('Total', col.month, y);
-  doc.text(`${currency}${totalRevenue.toFixed(2)}`, col.revenue, y);
+  doc.text(`${currency}${totalGross.toFixed(2)}`, col.gross, y);
+  doc.fillColor(totalRefunds > 0 ? '#b91c1c' : '#999').text(totalRefunds > 0 ? `-${currency}${totalRefunds.toFixed(2)}` : '—', col.refunds, y);
+  doc.fillColor('#000').text(`${currency}${totalRevenue.toFixed(2)}`, col.revenue, y);
   doc.text(`${currency}${totalExpense.toFixed(2)}`, col.expense, y);
-  doc.text(`${currency}${(totalRevenue - totalExpense).toFixed(2)}`, col.profit, y);
+  doc.fillColor(totalRevenue - totalExpense >= 0 ? '#166534' : '#b91c1c').text(`${currency}${(totalRevenue - totalExpense).toFixed(2)}`, col.profit, y);
+  doc.fillColor('#000');
 
   doc.end();
 });
@@ -306,6 +355,80 @@ const staffReport = asyncHandler(async (req, res) => {
   await sendWorkbook(res, workbook, 'staff-report', req.query.format);
 });
 
+// @desc  NEW — Cash Flow Report: monthly gross revenue, refunds, net revenue,
+// expenses, net cash flow. Reuses the same corrected computeMonthlyProfit.
+// @route GET /api/reports/cash-flow?format=xlsx|csv&year=2026
+const cashFlowReport = asyncHandler(async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const rows = await computeMonthlyProfit(year);
+
+  const workbook = new ExcelJS.Workbook();
+  buildSheet(
+    workbook,
+    'Cash Flow',
+    [
+      { header: 'Month', key: 'month', width: 10 },
+      { header: 'Gross Revenue', key: 'grossRevenue', width: 16 },
+      { header: 'Refunds', key: 'refunds', width: 14 },
+      { header: 'Net Revenue', key: 'revenue', width: 14 },
+      { header: 'Expenses', key: 'expense', width: 14 },
+      { header: 'Net Cash Flow', key: 'profit', width: 16 },
+    ],
+    rows
+  );
+  await sendWorkbook(res, workbook, `cash-flow-${year}`, req.query.format);
+});
+
+// @desc  NEW — Revenue by Payment Method
+// @route GET /api/reports/revenue-by-method?format=xlsx|csv&from=&to=
+const revenueByMethodReport = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const start = from ? new Date(from) : new Date(new Date().getFullYear(), 0, 1);
+  const end = to ? new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000) : new Date();
+
+  const rows = await Payment.aggregate([
+    grossRevenueMatchStage('paymentDate', start, end),
+    { $group: { _id: '$paymentMethod', total: { $sum: GROSS_COLLECTED_EXPR }, count: { $sum: 1 } } },
+    { $sort: { total: -1 } },
+  ]);
+
+  const workbook = new ExcelJS.Workbook();
+  buildSheet(
+    workbook,
+    'By Payment Method',
+    [
+      { header: 'Method', key: 'method', width: 18 },
+      { header: 'Transactions', key: 'count', width: 14 },
+      { header: 'Total', key: 'total', width: 14 },
+    ],
+    rows.map((r) => ({ method: r._id, count: r.count, total: round2(r.total) }))
+  );
+  await sendWorkbook(res, workbook, 'revenue-by-method', req.query.format);
+});
+
+// @desc  NEW — Revenue by Membership Plan (reuses financeController's computation)
+// @route GET /api/reports/revenue-by-plan?format=xlsx|csv&from=&to=
+const revenueByPlanReport = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const start = from ? new Date(from) : new Date(new Date().getFullYear(), 0, 1);
+  const end = to ? new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000) : new Date();
+
+  const rows = await computeRevenueByPlan(start, end);
+
+  const workbook = new ExcelJS.Workbook();
+  buildSheet(
+    workbook,
+    'By Membership Plan',
+    [
+      { header: 'Plan', key: 'plan', width: 24 },
+      { header: 'Transactions', key: 'count', width: 14 },
+      { header: 'Total Revenue', key: 'total', width: 16 },
+    ],
+    rows
+  );
+  await sendWorkbook(res, workbook, 'revenue-by-plan', req.query.format);
+});
+
 module.exports = {
   memberReport,
   membershipReport,
@@ -315,4 +438,7 @@ module.exports = {
   profitReportPdf,
   equipmentReport,
   staffReport,
+  cashFlowReport,
+  revenueByMethodReport,
+  revenueByPlanReport,
 };

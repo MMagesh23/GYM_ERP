@@ -9,16 +9,42 @@ const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { generateEntityId } = require('../utils/idGenerator');
 const { streamInvoicePdf } = require('../utils/generateInvoicePdf');
-const { validateRefundAmount } = require('../utils/billing');
+const { validateRefundAmount, summarizeMembershipBilling } = require('../utils/billing');
 const { buildSort } = require('../utils/sorting');
+const { DEFAULT_PAYMENT_METHODS } = require('../utils/paymentMethods');
 
 const PAYMENT_SORT_FIELDS = ['paymentDate', 'finalAmount', 'status'];
 
+// Secondary, best-effort safety net for payments NOT covered by the
+// membership-outstanding guard (e.g. a registration fee, product sale, or PT
+// session with no membershipId) and as defense-in-depth even when there is
+// one. The idempotencyKey unique-index check below is the REAL guarantee;
+// this just catches obviously-identical rapid submissions missing a key for
+// some reason (e.g. an older client build).
+const DUPLICATE_WINDOW_MS = 15 * 1000;
+
+const validatePaymentMethod = async (method) => {
+  const settings = await Settings.getSingleton();
+  const allowed = settings.paymentMethods?.length ? settings.paymentMethods : DEFAULT_PAYMENT_METHODS;
+  if (!allowed.includes(method)) {
+    throw new ApiError(400, `Invalid payment method "${method}". Allowed: ${allowed.join(', ')}.`);
+  }
+};
+
 // @desc  Record a new payment (optionally linked to a membership) and generate its invoice
 // @route POST /api/payments
-// body: { memberId, membershipId?, amount, discount?, tax?, paymentMethod, transactionNumber?, status?, amountPaid?, notes? }
+// body: { memberId, membershipId?, amount, discount?, tax?, paymentMethod, transactionNumber?, status?, amountPaid?, notes?, idempotencyKey }
 const createPayment = asyncHandler(async (req, res) => {
-  const { memberId, membershipId, amount, discount = 0, tax = 0, paymentMethod, transactionNumber, status, notes, amountPaid } = req.body;
+  const {
+    memberId, membershipId, amount, discount = 0, tax = 0,
+    paymentMethod, transactionNumber, status, notes, amountPaid, idempotencyKey,
+  } = req.body;
+
+  if (!idempotencyKey || typeof idempotencyKey !== 'string' || idempotencyKey.length < 8) {
+    throw new ApiError(400, 'A valid idempotencyKey is required to record a payment.');
+  }
+
+  await validatePaymentMethod(paymentMethod);
 
   const member = await Member.findById(memberId);
   if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
@@ -27,9 +53,6 @@ const createPayment = asyncHandler(async (req, res) => {
   if (membershipId) {
     membership = await Membership.findById(membershipId).populate('plan');
     if (!membership) throw new ApiError(404, 'Membership not found.');
-    // Verify this membership actually belongs to the member being billed — a
-    // caller sending memberId=A + membershipId=<B's membership> must not be able
-    // to create a payment/invoice against A that references B's membership record.
     if (String(membership.member) !== String(member._id)) {
       throw new ApiError(400, 'This membership does not belong to the selected member.');
     }
@@ -38,10 +61,6 @@ const createPayment = asyncHandler(async (req, res) => {
   const finalAmount = Math.round((Number(amount) - Number(discount) + Number(tax)) * 100) / 100;
   const resolvedStatus = status || 'paid';
 
-  // FIX: amountPaid tracks what was ACTUALLY collected, independent of finalAmount
-  // (what was invoiced). Without this, a 'partial' payment's collected amount was
-  // indistinguishable from a fully-paid one anywhere downstream (refunds, revenue
-  // reporting, pending-balance totals).
   let resolvedAmountPaid;
   if (resolvedStatus === 'paid') {
     resolvedAmountPaid = finalAmount;
@@ -63,23 +82,87 @@ const createPayment = asyncHandler(async (req, res) => {
     resolvedAmountPaid = 0;
   }
 
+  // ── Outstanding-balance guard (fast, friendly pre-check) ────────────
+  // Fresh from the DB on every request — never trusts a stale client value.
+  // This is what stops a due from being collected twice in the *sequential*
+  // case (staff genuinely didn't know it was already settled); the
+  // idempotencyKey unique index below is what stops it in the *concurrent*
+  // case (two near-simultaneous submissions racing each other).
+  if (membership) {
+    const existingPayments = await Payment.find({ membership: membership._id })
+      .select('finalAmount amountPaid status refund.refundedAmount')
+      .lean();
+    const billing = summarizeMembershipBilling(membership.finalAmount, existingPayments);
+
+    if (billing.outstanding <= 0) {
+      throw new ApiError(
+        409,
+        `This membership has no outstanding balance (already ${billing.status}). ` +
+          'Recording another payment against it would double-collect on a due that is already settled.'
+      );
+    }
+
+    const amountBeingCollected =
+      resolvedStatus === 'paid' ? finalAmount : resolvedStatus === 'partial' ? resolvedAmountPaid : 0;
+
+    if (amountBeingCollected > billing.outstanding + 0.01) {
+      throw new ApiError(
+        400,
+        `Amount collected (${amountBeingCollected.toFixed(2)}) exceeds the outstanding balance of ` +
+          `${billing.outstanding.toFixed(2)} for this membership. Collect up to the outstanding amount only.`
+      );
+    }
+  }
+
+  const possibleDuplicate = await Payment.findOne({
+    member: member._id,
+    membership: membership?._id || null,
+    amount: Number(amount),
+    paymentMethod,
+    createdAt: { $gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+  });
+  if (possibleDuplicate) {
+    throw new ApiError(
+      409,
+      `A matching payment (${possibleDuplicate.invoiceNumber}) was just recorded for this member. ` +
+        'If this is intentional, wait a moment and try again.'
+    );
+  }
+
   const invoiceNumber = await generateEntityId('invoiceNumber', 'INV', 5);
 
-  const payment = await Payment.create({
-    invoiceNumber,
-    member: member._id,
-    membership: membership?._id,
-    amount: Number(amount),
-    discount: Number(discount),
-    tax: Number(tax),
-    finalAmount,
-    amountPaid: resolvedAmountPaid,
-    paymentMethod,
-    transactionNumber,
-    status: resolvedStatus,
-    notes,
-    receivedBy: req.user._id,
-  });
+  let payment;
+  try {
+    // ── The actual, race-proof guarantee ──────────────────────────────
+    // If a second request with the same idempotencyKey lands here before the
+    // first has committed (or after it — doesn't matter, order is irrelevant),
+    // MongoDB's unique index on idempotencyKey rejects the second insert with
+    // a duplicate-key error, caught below. Nothing about timing matters.
+    payment = await Payment.create({
+      invoiceNumber,
+      member: member._id,
+      membership: membership?._id,
+      amount: Number(amount),
+      discount: Number(discount),
+      tax: Number(tax),
+      finalAmount,
+      amountPaid: resolvedAmountPaid,
+      paymentMethod,
+      transactionNumber,
+      status: resolvedStatus,
+      notes,
+      receivedBy: req.user._id,
+      idempotencyKey,
+    });
+  } catch (err) {
+    if (err.code === 11000 && err.keyPattern?.idempotencyKey) {
+      throw new ApiError(
+        409,
+        'This payment was already submitted moments ago. Refresh the page to see it — nothing was charged twice.'
+      );
+    }
+    throw err;
+  }
 
   const invoice = await Invoice.create({
     invoiceNumber,
@@ -172,7 +255,7 @@ const getPayment = asyncHandler(async (req, res) => {
 // @desc  Download the PDF invoice for a payment
 // @route GET /api/payments/:id/invoice
 const downloadInvoice = asyncHandler(async (req, res) => {
-  const payment = await Payment.findById(req.params.id).populate('member').populate('invoice');
+  const payment = await Payment.findById(req.params.id).populate('member').populate('invoice').populate('membership');
   if (!payment) throw new ApiError(404, 'Payment not found.');
 
   const invoice = payment.invoice || (await Invoice.findOne({ payment: payment._id }));
@@ -191,6 +274,7 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       gst: settings.gstNumber,
       footer: settings.receiptFooterMessage,
       currency: settings.currencySymbol,
+      accentColor: settings.invoiceAccentColor,
     },
     member: {
       memberId: payment.member.memberId,
@@ -205,17 +289,16 @@ const downloadInvoice = asyncHandler(async (req, res) => {
     grandTotal: invoice.grandTotal,
     paymentMethod: payment.paymentMethod,
     transactionNumber: payment.transactionNumber,
+    status: payment.status,
+    amountPaid: payment.amountPaid,
+    refundedAmount: payment.refund?.refundedAmount || 0,
+    membershipPeriod: payment.membership ? { start: payment.membership.startDate, end: payment.membership.endDate } : null,
   });
 });
 
 // @desc  Refund a payment (full or partial)
 // @route POST /api/payments/:id/refund
 // body: { amount, reason }
-//
-// FIX: previously capped the refund against finalAmount (invoiced total), not what
-// was actually collected — a partially-paid or even a pending/failed payment could
-// be "refunded" for more money than the gym ever received. Now capped against
-// amountPaid and blocked entirely for statuses where nothing was collected.
 const refundPayment = asyncHandler(async (req, res) => {
   const { amount, reason } = req.body;
   const payment = await Payment.findById(req.params.id);
@@ -270,9 +353,6 @@ const exportPayments = asyncHandler(async (req, res) => {
     { header: 'Discount', key: 'discount', width: 12 },
     { header: 'Tax', key: 'tax', width: 10 },
     { header: 'Final Amount', key: 'finalAmount', width: 14 },
-    // FIX: exports previously only showed the invoiced total, with no visibility
-    // into what was actually collected vs. still outstanding on partial payments,
-    // or how much of a payment had been refunded — both feed real accounting.
     { header: 'Collected', key: 'amountPaid', width: 14 },
     { header: 'Outstanding', key: 'outstanding', width: 14 },
     { header: 'Refunded', key: 'refunded', width: 12 },

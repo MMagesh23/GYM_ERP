@@ -9,6 +9,10 @@ const REPORT_FILES = {
   profit: 'profit-report',
   equipment: 'equipment-report',
   staff: 'staff-report',
+  // NEW
+  'cash-flow': 'cash-flow-report',
+  'revenue-by-method': 'revenue-by-method',
+  'revenue-by-plan': 'revenue-by-plan',
 };
 
 export const reportApi = {

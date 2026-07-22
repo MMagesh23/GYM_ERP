@@ -21,11 +21,7 @@ const expenseSchema = new mongoose.Schema(
     title: { type: String, required: true },
     amount: { type: Number, required: true },
     expenseDate: { type: Date, default: Date.now, index: true },
-    paymentMethod: {
-      type: String,
-      enum: ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'],
-      default: 'cash',
-    },
+    paymentMethod: { type: String, default: 'cash' }, // validated against Settings.paymentMethods in the controller, not a fixed enum,
     billUrl: { type: String, default: '' }, // uploaded bill/receipt (Cloudinary)
     vendor: { type: String, default: '' },
     notes: { type: String, default: '' },

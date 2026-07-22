@@ -14,4 +14,5 @@ module.exports = {
   Staff: require('./Staff'),
   Notification: require('./Notification'),
   AuditLog: require('./AuditLog'),
+  CashClosing: require('./CashClosing'),
 };

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import Modal from '../../components/common/Modal';
 import { expenseApi } from '../../services/expenseApi';
 
 const CATEGORIES = ['rent', 'electricity', 'salary', 'equipment', 'internet', 'maintenance', 'marketing', 'cleaning', 'miscellaneous'];
-const METHODS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
+const DEFAULT_PAYMENT_METHODS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'];
 
 const ExpenseFormModal = ({ open, onClose, onSaved, expense }) => {
+  const { data: settings } = useSelector((state) => state.settings);
+  const METHOD_OPTIONS = settings?.paymentMethods?.length ? settings.paymentMethods : DEFAULT_PAYMENT_METHODS;
   const isEdit = Boolean(expense);
   const [billFile, setBillFile] = useState(null);
   const {
@@ -97,7 +100,7 @@ const ExpenseFormModal = ({ open, onClose, onSaved, expense }) => {
           <div>
             <label className={labelClass}>Payment Method</label>
             <select className={inputClass} {...register('paymentMethod')}>
-              {METHODS.map((m) => (
+              {METHOD_OPTIONS.map((m) => (
                 <option key={m} value={m}>
                   {m.replace('_', ' ').toUpperCase()}
                 </option>

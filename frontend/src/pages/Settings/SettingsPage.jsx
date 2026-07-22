@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Image as ImageIcon, Save } from 'lucide-react';
+import PaymentMethodsEditor from '../../components/common/PaymentMethodsEditor';
 import { settingsApi } from '../../services/settingsApi';
 import { roleApi } from '../../services/roleApi';
 import { staffApi } from '../../services/staffApi';
@@ -44,7 +45,7 @@ const SettingsPage = () => {
 
   const onSubmit = async (formData) => {
     try {
-      await settingsApi.update(formData);
+      await settingsApi.update({ ...formData, paymentMethods: settings.paymentMethods });
       if (logoFile) {
         await settingsApi.uploadLogo(logoFile);
         setLogoFile(null);
@@ -117,6 +118,14 @@ const SettingsPage = () => {
                     <option key={i + 1} value={i + 1}>{new Date(2000, i, 1).toLocaleString('en', { month: 'long' })}</option>
                   ))}
                 </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Payment Methods</label>
+                <PaymentMethodsEditor
+                  value={settings.paymentMethods || []}
+                  onChange={(methods) => setSettings((s) => ({ ...s, paymentMethods: methods }))}
+                />
+                <p className="mt-1 text-xs text-gray-400">These appear as options everywhere a payment or expense method is recorded.</p>
               </div>
             </div>
           )}

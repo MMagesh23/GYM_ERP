@@ -16,5 +16,6 @@ router.use('/notifications', require('./notificationRoutes'));
 router.use('/reports', require('./reportRoutes'));
 router.use('/audit-logs', require('./auditLogRoutes'));
 router.use('/roles', require('./roleRoutes'));
+router.use('/finance', require('./financeRoutes')); // NEW
 
 module.exports = router;

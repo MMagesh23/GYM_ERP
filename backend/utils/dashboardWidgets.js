@@ -8,6 +8,9 @@ const WIDGET_DEFS = {
   expiredMembers: { module: 'members', summaryFields: ['expiredMembers'] },
   newMembersThisMonth: { module: 'members', summaryFields: ['newMembersThisMonth'] },
   monthlyRevenue: { module: 'payments', summaryFields: ['monthlyRevenue'] },
+  // NEW: surfaces how much of gross revenue was refunded this month, alongside
+  // the (now-corrected) net monthlyRevenue figure — same permission as revenue.
+  monthlyRefunds: { module: 'payments', summaryFields: ['monthlyRefunds'] },
   monthlyExpenses: { module: 'expenses', summaryFields: ['monthlyExpenses'] },
   netProfit: { module: 'expenses', summaryFields: ['netProfit'] },
   equipmentCount: { module: 'equipment', summaryFields: ['equipmentCount'] },

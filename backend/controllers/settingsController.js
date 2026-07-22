@@ -12,12 +12,18 @@ const getSettings = asyncHandler(async (req, res) => {
 const updateSettings = asyncHandler(async (req, res) => {
   const settings = await Settings.getSingleton();
 
-  // Deep-merge nested objects instead of clobbering them
-  const { features, businessHours, socialLinks, ...rest } = req.body;
+  const { features, businessHours, socialLinks, paymentMethods, ...rest } = req.body;
   Object.assign(settings, rest);
   if (features) Object.assign(settings.features, features);
   if (socialLinks) Object.assign(settings.socialLinks, socialLinks);
   if (businessHours) settings.businessHours = businessHours;
+  // NEW — sanitize: dedupe, trim, drop blanks, and never allow the list to
+  // go empty (would lock out recording any payment/expense at all).
+  if (paymentMethods) {
+    const cleaned = [...new Set(paymentMethods.map((m) => String(m).trim().toLowerCase().replace(/\s+/g, '_')).filter(Boolean))];
+    if (cleaned.length === 0) throw new ApiError(400, 'At least one payment method must remain configured.');
+    settings.paymentMethods = cleaned;
+  }
 
   await settings.save();
 

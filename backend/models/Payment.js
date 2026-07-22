@@ -12,20 +12,25 @@ const paymentSchema = new mongoose.Schema(
     tax: { type: Number, default: 0 },
     finalAmount: { type: Number, required: true }, // what was invoiced / owed
 
-    // FIX: tracks what was ACTUALLY collected, separate from finalAmount (what was
-    // owed). Needed so refunds can never exceed real collected money, and so
-    // revenue/pending-balance reporting reflects reality for 'partial' payments —
-    // previously a partial payment's collected amount was indistinguishable from
-    // a fully-paid one anywhere in the system.
-    // Semantics: 'paid' => equals finalAmount; 'pending'/'failed' => 0;
-    // 'partial' => must be > 0 and < finalAmount (enforced in paymentController).
     amountPaid: { type: Number, default: 0 },
 
-    paymentMethod: {
-      type: String,
-      enum: ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet'],
-      required: true,
-    },
+    // FIX (double-payment guard): the client generates one UUID per form
+    // "session" (when the Record Payment / Collect Due modal opens) and sends
+    // it on every submit attempt for that session. A double-click, a network
+    // retry after a timed-out-but-actually-successful request, or two staff
+    // racing on the same due all send the SAME key — the unique index below
+    // makes the second insert fail atomically at the database level, which a
+    // read-then-write balance check alone cannot guarantee under concurrency.
+    // `sparse: true` so any pre-existing records (created before this field
+    // existed) with no key don't collide with each other on `null`.
+    idempotencyKey: { type: String, unique: true, sparse: true, index: true },
+
+    // FIX (configurable payment methods): was a fixed mongoose enum, which
+    // meant adding a new payment method required a code deploy. Now a plain
+    // string, validated at the controller layer against
+    // Settings.paymentMethods (see paymentController.js) so it stays
+    // consistent app-wide without needing DB migrations for new methods.
+    paymentMethod: { type: String, required: true },
     transactionNumber: { type: String, default: '' },
     paymentDate: { type: Date, default: Date.now },
 

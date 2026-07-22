@@ -19,6 +19,10 @@ export const fetchCurrentUser = createAsyncThunk('auth/me', async (_, { rejectWi
   }
 });
 
+export const restoreSession = createAsyncThunk('auth/restoreSession', async (_, { dispatch }) => {
+  await dispatch(fetchCurrentUser());
+});
+
 export const logoutUser = createAsyncThunk('auth/logout', async () => {
   await authApi.logout();
 });
@@ -58,13 +62,30 @@ const authSlice = createSlice({
         state.status = 'failed';
         state.error = action.payload;
       })
+      .addCase(fetchCurrentUser.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(fetchCurrentUser.fulfilled, (state, action) => {
         state.user = action.payload;
         state.status = 'succeeded';
+        state.error = null;
       })
-      .addCase(fetchCurrentUser.rejected, (state) => {
+      .addCase(fetchCurrentUser.rejected, (state, action) => {
         state.user = null;
         state.accessToken = null;
+        state.status = 'failed';
+        state.error = action.payload || 'Not authenticated';
+      })
+      .addCase(restoreSession.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(restoreSession.fulfilled, (state) => {
+        state.status = 'succeeded';
+      })
+      .addCase(restoreSession.rejected, (state) => {
+        state.status = 'failed';
       })
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;

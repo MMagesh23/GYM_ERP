@@ -1,9 +1,21 @@
 const ExcelJS = require('exceljs');
 const Expense = require('../models/Expense');
+const Settings = require('../models/Settings');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { saveBufferToUploads } = require('../utils/fileStorage');
+const { assertDateEditable } = require('../utils/cashLock');
+const { DEFAULT_PAYMENT_METHODS } = require('../utils/paymentMethods');
+
+const validatePaymentMethod = async (method) => {
+  if (!method) return; // expenses don't require a method historically; keep optional
+  const settings = await Settings.getSingleton();
+  const allowed = settings.paymentMethods?.length ? settings.paymentMethods : DEFAULT_PAYMENT_METHODS;
+  if (!allowed.includes(method)) {
+    throw new ApiError(400, `Invalid payment method "${method}". Allowed: ${allowed.join(', ')}.`);
+  }
+};
 
 // @desc  List expenses with filters and pagination
 // @route GET /api/expenses?page=&limit=&category=&from=&to=
@@ -44,10 +56,14 @@ const getExpense = asyncHandler(async (req, res) => {
 // @desc  Create an expense, optionally with an uploaded bill/receipt
 // @route POST /api/expenses  (multipart/form-data if a bill is attached)
 const createExpense = asyncHandler(async (req, res) => {
+  await validatePaymentMethod(req.body.paymentMethod);
+
+  // FIX (closed-day protection): a backdated expense into an already-closed
+  // day would silently make that day's locked cash snapshot wrong. Blocked
+  // for everyone except admins (who get an explicit, audited override).
+  const closing = await assertDateEditable(req.body.expenseDate || new Date(), { isAdmin: req.user.role === 'admin' });
+
   const payload = { ...req.body, createdBy: req.user._id };
-  // FIX: missing `await` previously stored the string "[object Promise]" as the
-  // billUrl instead of the actual uploaded file URL — every expense receipt
-  // upload was silently broken.
   if (req.file) payload.billUrl = await saveBufferToUploads(req.file, 'bills');
 
   const expense = await Expense.create(payload);
@@ -56,7 +72,9 @@ const createExpense = asyncHandler(async (req, res) => {
     action: 'expense',
     module: 'expenses',
     targetId: expense._id,
-    description: `Added expense "${expense.title}" (${expense.category}) - ${expense.amount}`,
+    description:
+      `Added expense "${expense.title}" (${expense.category}) - ${expense.amount}` +
+      (closing ? ` [ADMIN OVERRIDE: backdated into a closed cash day, ${closing.date.toDateString()}]` : ''),
   });
 
   res.status(201).json({ success: true, data: expense });
@@ -68,12 +86,29 @@ const updateExpense = asyncHandler(async (req, res) => {
   const expense = await Expense.findById(req.params.id);
   if (!expense) throw new ApiError(404, 'Expense not found.');
 
+  if (req.body.paymentMethod) await validatePaymentMethod(req.body.paymentMethod);
+
+  // Check BOTH the expense's original date and (if changed) its new date —
+  // an edit could either touch an already-locked day, or try to move an
+  // expense INTO one.
+  const originalClosing = await assertDateEditable(expense.expenseDate, { isAdmin: req.user.role === 'admin' });
+  let targetClosing = originalClosing;
+  if (req.body.expenseDate && new Date(req.body.expenseDate).toDateString() !== expense.expenseDate.toDateString()) {
+    targetClosing = await assertDateEditable(req.body.expenseDate, { isAdmin: req.user.role === 'admin' });
+  }
+
   Object.assign(expense, req.body);
-  // FIX: same missing-await bug as createExpense above.
   if (req.file) expense.billUrl = await saveBufferToUploads(req.file, 'bills');
   await expense.save();
 
-  await logAudit(req, { action: 'update', module: 'expenses', targetId: expense._id, description: `Updated expense "${expense.title}"` });
+  await logAudit(req, {
+    action: 'update',
+    module: 'expenses',
+    targetId: expense._id,
+    description:
+      `Updated expense "${expense.title}"` +
+      (originalClosing || targetClosing ? ' [ADMIN OVERRIDE: touches a closed cash day]' : ''),
+  });
 
   res.json({ success: true, data: expense });
 });
@@ -84,9 +119,18 @@ const deleteExpense = asyncHandler(async (req, res) => {
   const expense = await Expense.findById(req.params.id);
   if (!expense) throw new ApiError(404, 'Expense not found.');
 
+  const closing = await assertDateEditable(expense.expenseDate, { isAdmin: req.user.role === 'admin' });
+
   await expense.deleteOne();
 
-  await logAudit(req, { action: 'delete', module: 'expenses', targetId: expense._id, description: `Deleted expense "${expense.title}"` });
+  await logAudit(req, {
+    action: 'delete',
+    module: 'expenses',
+    targetId: expense._id,
+    description:
+      `Deleted expense "${expense.title}"` +
+      (closing ? ` [ADMIN OVERRIDE: removed from a closed cash day, ${closing.date.toDateString()}]` : ''),
+  });
 
   res.json({ success: true, message: 'Expense deleted.' });
 });
