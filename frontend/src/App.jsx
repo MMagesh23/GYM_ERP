@@ -23,6 +23,7 @@ import FinanceDashboardPage from './pages/Finance/FinanceDashboardPage';
 import CashClosingPage from './pages/Finance/CashClosingPage';
 import { restoreSession } from './redux/slices/authSlice';
 import { fetchSettings } from './redux/slices/settingsSlice';
+import { applyBrandTheme } from './utils/branding';
 
 function App() {
   const dispatch = useDispatch();
@@ -45,6 +46,8 @@ function App() {
   // Dynamically apply favicon + document title once branding settings load
   useEffect(() => {
     if (!settings) return;
+
+    applyBrandTheme(settings);
 
     if (settings.favicon) {
       let link = document.querySelector("link[rel~='icon']");

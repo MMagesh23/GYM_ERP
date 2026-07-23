@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --brand-50: #eef7ff;
+  --brand-100: #d9edff;
+  --brand-200: #bce0ff;
+  --brand-300: #8ecdff;
+  --brand-400: #59b0ff;
+  --brand-500: #3390fa;
+  --brand-600: #1d71ef;
+  --brand-700: #175bdc;
+  --brand-800: #1949b2;
+  --brand-900: #1a418c;
+  --accent-color: #10b981;
+}
+
 html, body, #root { height: 100%; }
 body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 
@@ -15,7 +29,7 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-600; }
 
 /* Consistent focus ring app-wide, keyboard-only */
-:focus-visible { outline: 2px solid #3390fa; outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
 
 /* Reusable hover-lift for clickable cards (StatCard, PlanCard, EquipmentDetail hero, etc) */
 .card-lift {

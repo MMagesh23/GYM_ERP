@@ -2,7 +2,8 @@ const Settings = require('../models/Settings');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
-const { saveBufferToUploads } = require('../utils/fileStorage');
+const { saveBrandingAsset, deleteBrandingAsset } = require('../utils/fileStorage');
+
 
 const getSettings = asyncHandler(async (req, res) => {
   const settings = await Settings.getSingleton();
@@ -38,29 +39,33 @@ const uploadLogo = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'No logo file uploaded.');
 
   const settings = await Settings.getSingleton();
-  // FIX: missing `await` previously stored "[object Promise]" as the logo URL
-  // instead of the uploaded file's URL — every logo upload was silently broken
-  // and the sidebar/login branding would show a broken image.
-  settings.gymLogo = await saveBufferToUploads(req.file, 'branding');
+  const previousPublicId = settings.gymLogoPublicId;
+
+  const { url, publicId } = await saveBrandingAsset(req.file, 'branding');
+  settings.gymLogo = url;
+  settings.gymLogoPublicId = publicId || '';
   await settings.save();
 
-  await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated gym logo' });
+  await deleteBrandingAsset(previousPublicId); // best-effort, non-blocking
 
+  await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated gym logo' });
   res.json({ success: true, data: settings });
 });
 
-// @desc  Upload/replace the favicon
-// @route POST /api/settings/favicon
 const uploadFavicon = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'No favicon file uploaded.');
 
   const settings = await Settings.getSingleton();
-  // FIX: same missing-await bug as uploadLogo above.
-  settings.favicon = await saveBufferToUploads(req.file, 'branding');
+  const previousPublicId = settings.faviconPublicId;
+
+  const { url, publicId } = await saveBrandingAsset(req.file, 'branding');
+  settings.favicon = url;
+  settings.faviconPublicId = publicId || '';
   await settings.save();
 
-  await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated favicon' });
+  await deleteBrandingAsset(previousPublicId);
 
+  await logAudit(req, { action: 'update', module: 'settings', targetId: settings._id, description: 'Updated favicon' });
   res.json({ success: true, data: settings });
 });
 

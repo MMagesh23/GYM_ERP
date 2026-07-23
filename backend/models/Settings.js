@@ -5,8 +5,10 @@ const settingsSchema = new mongoose.Schema(
     // Identity / Branding
     gymName: { type: String, default: 'My Gym' },
     tagline: { type: String, default: '' },
-    gymLogo: { type: String, default: '' },        // returned as /uploads/branding/xxx.png
+    gymLogo: { type: String, default: '' },
+    gymLogoPublicId: { type: String, default: '' },   // NEW — enables cleanup on replacement
     favicon: { type: String, default: '' },
+    faviconPublicId: { type: String, default: '' },   // NEW
     brandColor: { type: String, default: '#3390fa' }, // drives --brand-500 at runtime
     accentColor: { type: String, default: '#10b981' },
 

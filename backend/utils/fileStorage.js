@@ -17,6 +17,15 @@ if (cloudinaryConfigured) {
   });
 }
 
+const saveToLocalDisk = (file, subfolder) => {
+  const dir = path.join(UPLOADS_ROOT, subfolder);
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = path.extname(file.originalname) || '';
+  const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+  fs.writeFileSync(path.join(dir, filename), file.buffer);
+  return `/uploads/${subfolder}/${filename}`;
+};
+
 const uploadToCloudinary = (file, subfolder) =>
   new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -26,22 +35,6 @@ const uploadToCloudinary = (file, subfolder) =>
     stream.end(file.buffer);
   });
 
-const saveToLocalDisk = (file, subfolder) => {
-  const dir = path.join(UPLOADS_ROOT, subfolder);
-  fs.mkdirSync(dir, { recursive: true });
-
-  const ext = path.extname(file.originalname) || '';
-  const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
-  fs.writeFileSync(path.join(dir, filename), file.buffer);
-
-  return `/uploads/${subfolder}/${filename}`;
-};
-
-/**
- * Saves an uploaded file and returns a public URL. Uses Cloudinary automatically when
- * CLOUDINARY_* env vars are set (recommended for any deployment with an ephemeral
- * filesystem — Render, Railway, etc). Falls back to local disk for local dev.
- */
 const saveBufferToUploads = async (file, subfolder) => {
   if (cloudinaryConfigured) {
     try {
@@ -54,4 +47,37 @@ const saveBufferToUploads = async (file, subfolder) => {
   return saveToLocalDisk(file, subfolder);
 };
 
-module.exports = { saveBufferToUploads, cloudinaryConfigured };
+// NEW — used only for branding assets (logo/favicon), which get REPLACED
+// rather than accumulated. Returns the public_id alongside the URL so the
+// previous asset can be cleaned up instead of left orphaned in Cloudinary.
+// Other callers (equipment/staff photos, expense bills) are untouched —
+// they keep using saveBufferToUploads's plain-string return.
+const saveBrandingAsset = async (file, subfolder) => {
+  if (cloudinaryConfigured) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: `gym-erp/${subfolder}`, resource_type: 'image' },
+          (err, result) => (err ? reject(err) : resolve({ url: result.secure_url, publicId: result.public_id }))
+        );
+        stream.end(file.buffer);
+      });
+    } catch (err) {
+      console.error('Cloudinary branding upload failed, falling back to local disk:', err.message);
+      return { url: saveToLocalDisk(file, subfolder), publicId: null };
+    }
+  }
+  return { url: saveToLocalDisk(file, subfolder), publicId: null };
+};
+
+const deleteBrandingAsset = async (publicId) => {
+  if (!publicId || !cloudinaryConfigured) return;
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (err) {
+    // Best-effort cleanup only — never block the request on this.
+    console.error('Cloudinary asset cleanup failed:', err.message);
+  }
+};
+
+module.exports = { saveBufferToUploads, saveBrandingAsset, deleteBrandingAsset, cloudinaryConfigured };

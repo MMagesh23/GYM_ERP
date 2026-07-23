@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Image as ImageIcon, Save } from 'lucide-react';
@@ -12,6 +13,7 @@ import BusinessHoursPanel from './BusinessHoursPanel';
 import RolesPanel from './RolesPanel';
 import OverviewPanel from './OverviewPanel';
 import DashboardWidgetsPanel from './DashboardWidgetsPanel';
+import { setSettings as setSettingsStore } from '../../redux/slices/settingsSlice';
 
 const TABS = [
   'Overview', 'General', 'Branding', 'Invoicing', 'Business Hours',
@@ -29,12 +31,15 @@ const SettingsPage = () => {
   const [logoPreview, setLogoPreview] = useState(null);
   const [roleCount, setRoleCount] = useState(null);
   const [staffCount, setStaffCount] = useState(null);
+  const dispatch = useDispatch();
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm();
 
   const load = async () => {
     const { data } = await settingsApi.get();
-    setSettings(data.data);
-    reset(data.data);
+    const nextSettings = data.data;
+    setSettings(nextSettings);
+    reset(nextSettings);
+    dispatch(setSettingsStore(nextSettings));
   };
 
   useEffect(() => {
