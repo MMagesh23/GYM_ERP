@@ -102,11 +102,11 @@ const AppLayout = () => {
             to={to}
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+              `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                 collapsed ? 'justify-center px-0' : ''
               } ${
                 isActive
-                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-brand-600'
                   : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
               }`
             }
@@ -280,9 +280,11 @@ const AppLayout = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto">
+        <div className="route-transition">
           <Outlet />
-        </main>
+        </div>
+      </main>
       </div>
     </div>
   );

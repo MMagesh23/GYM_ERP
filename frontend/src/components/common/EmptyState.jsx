@@ -1,7 +1,7 @@
 const EmptyState = ({ icon: Icon, title, description, action }) => (
-  <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+  <div className="flex flex-col items-center justify-center px-6 py-14 text-center animate-settle-in">
     {Icon && (
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-gray-300 dark:bg-gray-800 dark:text-gray-600">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-gray-300 ring-1 ring-inset ring-gray-100 dark:bg-gray-800 dark:text-gray-600 dark:ring-gray-800">
         <Icon size={26} />
       </div>
     )}

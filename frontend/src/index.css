@@ -19,57 +19,121 @@
 html, body, #root { height: 100%; }
 body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 
-/* Smoother, slightly springy easing app-wide instead of the default linear-ish curve */
 * { transition-property: background-color, border-color, color, box-shadow, transform, opacity; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 
-/* Thin, unobtrusive scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-700 rounded-full; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-600; }
 
-/* Consistent focus ring app-wide, keyboard-only */
 :focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
 
-/* Reusable hover-lift for clickable cards (StatCard, PlanCard, EquipmentDetail hero, etc) */
+/* ── Shared component classes ──────────────────────────────────────────
+   NEW: previously every form/modal in the app hand-rolled its own
+   `inputClass`/`labelClass`/button className strings (20+ near-identical
+   copies across Modals). Centralizing them here means: (a) one place to
+   fix a11y/contrast/error states, (b) new screens get consistency for
+   free, (c) existing screens can migrate incrementally by swapping their
+   local `inputClass` variable to `'input'` — no JSX restructuring needed.
+*/
+@layer components {
+  .label {
+    @apply mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900
+           placeholder:text-gray-400
+           focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500
+           disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400
+           dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500
+           dark:disabled:bg-gray-800/50;
+  }
+
+  .input-error {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500;
+  }
+
+  .field-error {
+    @apply mt-1 text-xs text-red-500;
+  }
+
+  .field-hint {
+    @apply mt-1 text-xs text-gray-400;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
+           transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 hover:shadow-card-hover
+           active:bg-brand-800;
+  }
+
+  .btn-secondary {
+    @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50
+           dark:border-gray-700 dark:bg-transparent dark:text-gray-200 dark:hover:bg-gray-800;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
+  }
+
+  .btn-ghost {
+    @apply btn text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .card {
+    @apply rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900;
+  }
+
+  .card-hoverable {
+    @apply card transition hover:shadow-card-hover hover:-translate-y-0.5;
+  }
+}
+
 .card-lift {
   transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-.card-lift:hover {
-  transform: translateY(-2px);
-}
+.card-lift:hover { transform: translateY(-2px); }
 
-/* Skeleton loading shimmer — plain CSS, not @apply, to avoid layer-order issues */
 .skeleton {
   border-radius: 0.375rem;
-  background-image: linear-gradient(
-    90deg,
-    #e5e7eb 0px,
-    #f3f4f6 40px,
-    #e5e7eb 80px
-  );
+  background-image: linear-gradient(90deg, #e5e7eb 0px, #f3f4f6 40px, #e5e7eb 80px);
   background-size: 400px 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
-
 .dark .skeleton {
-  background-image: linear-gradient(
-    90deg,
-    #1f2937 0px,
-    #374151 40px,
-    #1f2937 80px
-  );
+  background-image: linear-gradient(90deg, #1f2937 0px, #374151 40px, #1f2937 80px);
   background-size: 400px 100%;
 }
-
 @keyframes skeleton-shimmer {
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
 
-/* Subtle "content just settled" cue for freshly-loaded lists/cards */
 @keyframes settleIn {
   0% { opacity: 0; transform: translateY(4px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 .animate-settle-in { animation: settleIn 220ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* NEW: gives every route a soft settle-in instead of an abrupt swap when
+   navigating via React Router — cheap perceived-performance win. */
+@keyframes routeIn {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.route-transition { animation: routeIn 180ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* NEW: consistent empty/zero-state number so "no data" and "0" read
+   differently at a glance across StatCards. */
+.stat-value-empty {
+  @apply text-gray-300 dark:text-gray-700;
+}
