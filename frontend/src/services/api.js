@@ -3,8 +3,8 @@ import { getStore } from '../redux/storeRegistry';
 import { setAccessToken, logoutLocal } from '../redux/slices/authSlice';
 
 const api = axios.create({
-  baseURL: '/api',
-  withCredentials: true, // sends the httpOnly refreshToken cookie
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  withCredentials: true,
 });
 
 const getCurrentStore = () => getStore();
