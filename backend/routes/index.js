@@ -17,5 +17,8 @@ router.use('/reports', require('./reportRoutes'));
 router.use('/audit-logs', require('./auditLogRoutes'));
 router.use('/roles', require('./roleRoutes'));
 router.use('/finance', require('./financeRoutes')); // NEW
+router.use('/email-settings', require('./emailSettingsRoutes')); // NEW - Email Configuration module
+router.use('/email-templates', require('./emailTemplateRoutes')); // NEW
+router.use('/email-logs', require('./emailLogRoutes')); // NEW
 
 module.exports = router;

@@ -13,16 +13,17 @@ import BusinessHoursPanel from './BusinessHoursPanel';
 import RolesPanel from './RolesPanel';
 import OverviewPanel from './OverviewPanel';
 import DashboardWidgetsPanel from './DashboardWidgetsPanel';
+import EmailPanel from './EmailPanel';
 import { setSettings as setSettingsStore } from '../../redux/slices/settingsSlice';
 
 const TABS = [
   'Overview', 'General', 'Branding', 'Invoicing', 'Business Hours',
-  'Dashboard Widgets', 'Roles & Permissions', 'Features', 'Security',
+  'Dashboard Widgets', 'Roles & Permissions', 'Email', 'Features', 'Security',
 ];
 
 // Tabs that render their own self-contained panel (with its own save button)
 // instead of the shared form at the bottom of this page.
-const STANDALONE_TABS = ['Overview', 'Roles & Permissions', 'Business Hours', 'Dashboard Widgets'];
+const STANDALONE_TABS = ['Overview', 'Roles & Permissions', 'Business Hours', 'Dashboard Widgets', 'Email'];
 
 const SettingsPage = () => {
   const [tab, setTab] = useState('Overview');
@@ -100,6 +101,8 @@ const SettingsPage = () => {
       {tab === 'Dashboard Widgets' && (
         <DashboardWidgetsPanel initial={settings.dashboardWidgets} onSaved={setSettings} />
       )}
+
+      {tab === 'Email' && <EmailPanel />}
 
       {!STANDALONE_TABS.includes(tab) && (
         <form onSubmit={handleSubmit(onSubmit)}>

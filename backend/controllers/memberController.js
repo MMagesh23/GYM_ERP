@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { generateMemberId } = require('../utils/idGenerator');
 const { summarizeMembershipBilling } = require('../utils/billing');
+const { sendTemplatedEmailAsync } = require('../utils/emailService');
 
 // Attaches a `billing` summary (invoiced/collected/outstanding/status) onto each
 // member's currentMembership so list/profile views can show "this member owes
@@ -109,6 +110,18 @@ const createMember = asyncHandler(async (req, res) => {
     targetId: member._id,
     description: `Created member ${member.memberId} (${member.firstName} ${member.lastName || ''})`,
   });
+
+  // Automatic trigger: Welcome Email. Fire-and-forget (see emailService) so a
+  // slow/unavailable SMTP server never delays or fails member creation itself.
+  if (member.email) {
+    sendTemplatedEmailAsync({
+      to: member.email,
+      templateType: 'welcome',
+      data: { memberName: `${member.firstName} ${member.lastName || ''}`.trim() },
+      relatedMember: member._id,
+      sentBy: req.user._id,
+    });
+  }
 
   res.status(201).json({ success: true, data: member });
 });

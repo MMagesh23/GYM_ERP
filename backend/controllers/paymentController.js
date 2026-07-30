@@ -12,6 +12,7 @@ const { streamInvoicePdf } = require('../utils/generateInvoicePdf');
 const { validateRefundAmount, summarizeMembershipBilling } = require('../utils/billing');
 const { buildSort } = require('../utils/sorting');
 const { DEFAULT_PAYMENT_METHODS } = require('../utils/paymentMethods');
+const { sendTemplatedEmailAsync } = require('../utils/emailService');
 // FIX (P1): reuse the same closed-cash-day guard expenseController already
 // uses. Previously payments/refunds had no such check at all, so a cash
 // payment or refund could be silently backdated into an already-closed day,
@@ -215,6 +216,35 @@ const createPayment = asyncHandler(async (req, res) => {
         : '') +
       (closing ? ` [ADMIN OVERRIDE: recorded into a closed cash day, ${closing.date.toDateString()}]` : ''),
   });
+
+  // Automatic triggers: Payment Receipt (paid/partial - money was actually
+  // collected) or Payment Reminder (pending - nothing collected yet).
+  if (member.email) {
+    const memberName = `${member.firstName} ${member.lastName || ''}`.trim();
+    const membershipPlan = membership?.plan?.name || '';
+
+    if (resolvedStatus === 'paid' || resolvedStatus === 'partial') {
+      sendTemplatedEmailAsync({
+        to: member.email,
+        templateType: 'payment_receipt',
+        data: { memberName, membershipPlan, amount: resolvedAmountPaid },
+        relatedMember: member._id,
+        relatedMembership: membership?._id,
+        relatedPayment: payment._id,
+        sentBy: req.user._id,
+      });
+    } else if (resolvedStatus === 'pending') {
+      sendTemplatedEmailAsync({
+        to: member.email,
+        templateType: 'payment_reminder',
+        data: { memberName, membershipPlan, amount: finalAmount },
+        relatedMember: member._id,
+        relatedMembership: membership?._id,
+        relatedPayment: payment._id,
+        sentBy: req.user._id,
+      });
+    }
+  }
 
   res.status(201).json({ success: true, data: payment });
 });

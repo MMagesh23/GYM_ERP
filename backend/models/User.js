@@ -29,6 +29,12 @@ const userSchema = new mongoose.Schema(
     // Refresh token rotation
     refreshTokenHash: { type: String, default: null },
 
+    // Password reset (email-based, via the "Password Reset" email template).
+    // Stores a SHA-256 hash of the reset token, never the raw token — same
+    // rationale as refreshTokenHash: a leaked DB dump alone can't be replayed.
+    resetPasswordTokenHash: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null },
+
     lastLoginAt: { type: Date },
     lastLoginIP: { type: String },
   },
@@ -52,6 +58,8 @@ userSchema.set('toJSON', {
   transform: (_doc, ret) => {
     delete ret.passwordHash;
     delete ret.refreshTokenHash;
+    delete ret.resetPasswordTokenHash;
+    delete ret.resetPasswordExpires;
     return ret;
   },
 });

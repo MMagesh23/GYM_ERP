@@ -9,10 +9,13 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
   hashToken,
+  generatePasswordResetToken,
 } = require('../utils/tokens');
+const { sendTemplatedEmailAsync } = require('../utils/emailService');
 
 const MAX_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS) || 5;
 const LOCK_MINUTES = Number(process.env.LOCK_TIME_MINUTES) || 15;
+const RESET_TOKEN_MINUTES = 30;
 
 // FIX (production deployment bug): this was hardcoded to `sameSite: 'strict'`.
 // The README's own recommended deployment (Vercel frontend + Render/Railway
@@ -278,7 +281,87 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Password changed successfully.' });
 });
 
+// @desc  Request a password reset email (uses the "Password Reset" email template)
+// @route POST /api/auth/forgot-password
+// body: { email }
+//
+// Always responds with the same generic success message regardless of whether
+// the email exists, so this endpoint can't be used to enumerate valid accounts.
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) throw new ApiError(400, 'Email is required.');
+
+  const genericMessage = 'If an account exists for that email, a password reset link has been sent.';
+  const user = await User.findOne({ email: String(email).toLowerCase().trim() });
+
+  if (user && user.isActive) {
+    const rawToken = generatePasswordResetToken();
+    user.resetPasswordTokenHash = hashToken(rawToken);
+    user.resetPasswordExpires = new Date(Date.now() + RESET_TOKEN_MINUTES * 60 * 1000);
+    await user.save();
+
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const resetLink = `${clientUrl}/reset-password?token=${rawToken}&uid=${user._id}`;
+
+    // Fire-and-forget: a slow/failed SMTP send must never delay or fail this
+    // response, and must never leak whether the account exists via timing.
+    sendTemplatedEmailAsync({
+      to: user.email,
+      templateType: 'password_reset',
+      data: { memberName: user.name, resetLink },
+      sentBy: null,
+    });
+
+    await logAudit(req, { action: 'update', module: 'auth', targetId: user._id, description: `Password reset requested for ${user.email}` });
+  }
+
+  res.json({ success: true, message: genericMessage });
+});
+
+// @desc  Complete a password reset using the token emailed by forgotPassword
+// @route POST /api/auth/reset-password
+// body: { userId, token, newPassword }
+const resetPassword = asyncHandler(async (req, res) => {
+  const { userId, token, newPassword } = req.body;
+  if (!userId || !token || !newPassword) {
+    throw new ApiError(400, 'userId, token, and newPassword are required.');
+  }
+  if (newPassword.length < 8) {
+    throw new ApiError(400, 'New password must be at least 8 characters.');
+  }
+
+  const user = await User.findById(userId);
+  if (
+    !user ||
+    !user.resetPasswordTokenHash ||
+    !user.resetPasswordExpires ||
+    user.resetPasswordExpires < new Date() ||
+    user.resetPasswordTokenHash !== hashToken(token)
+  ) {
+    throw new ApiError(400, 'This password reset link is invalid or has expired. Please request a new one.');
+  }
+
+  await user.setPassword(newPassword);
+  user.resetPasswordTokenHash = null;
+  user.resetPasswordExpires = null;
+  user.loginAttempts = 0;
+  user.lockUntil = undefined;
+  await user.save();
+
+  // A password reset is equivalent to a compromise-recovery event — kill every
+  // existing session, same as changePassword does for a self-service change.
+  await Session.updateMany(
+    { user: user._id, revoked: false },
+    { revoked: true, revokedAt: new Date(), revokedReason: 'password_reset' }
+  );
+
+  await logAudit(req, { action: 'update', module: 'auth', targetId: user._id, description: `${user.email} reset their password via email link` });
+
+  res.json({ success: true, message: 'Password has been reset. You can now log in with your new password.' });
+});
+
 module.exports = {
   register, login, refresh, logout, me,
   listMySessions, revokeSession, revokeOtherSessions, listUserSessions, changePassword,
+  forgotPassword, resetPassword,
 };

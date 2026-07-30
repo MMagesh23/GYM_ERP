@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { loginUser } from '../../redux/slices/authSlice';
@@ -49,7 +49,12 @@ const LoginPage = () => {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Password</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-sm font-medium">Password</label>
+              <Link to="/forgot-password" className="text-xs font-medium text-brand-600 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800"

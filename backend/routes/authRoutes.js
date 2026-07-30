@@ -14,6 +14,8 @@ const {
   revokeOtherSessions,
   listUserSessions,
   changePassword,
+  forgotPassword,
+  resetPassword,
 } = require('../controllers/authController');
 
 const router = express.Router();
@@ -55,6 +57,24 @@ router.put(
   ],
   validate,
   changePassword
+);
+
+// Password reset via emailed link (no auth required - that's the point).
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().withMessage('Valid email is required')],
+  validate,
+  forgotPassword
+);
+router.post(
+  '/reset-password',
+  [
+    body('userId').notEmpty().withMessage('userId is required'),
+    body('token').notEmpty().withMessage('token is required'),
+    body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
+  ],
+  validate,
+  resetPassword
 );
 
 // Session management — order matters: static paths before /:id-style routes

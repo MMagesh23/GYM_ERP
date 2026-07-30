@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBrandPalette } from './branding.js';
+import { buildBrandPalette } from '../src/utils/branding.js';
 
 test('buildBrandPalette returns a full palette rooted at the selected brand color', () => {
   const palette = buildBrandPalette('#ff6600');

@@ -14,6 +14,7 @@ const {
   calcUnfreezeAdjustment,
   summarizeMembershipBilling,
 } = require('../utils/billing');
+const { sendTemplatedEmailAsync } = require('../utils/emailService');
 
 // Shared by historyForMember and anywhere else that needs "how much of each of
 // these memberships has actually been collected" — see utils/billing.js for why
@@ -97,6 +98,22 @@ const createMembership = asyncHandler(async (req, res) => {
       (Number(extraDiscount) > 0 ? ` with a discretionary discount of ${Number(extraDiscount).toFixed(2)}` : ''),
   });
 
+  // Automatic trigger: Membership Registration email.
+  if (member.email) {
+    sendTemplatedEmailAsync({
+      to: member.email,
+      templateType: 'membership_registration',
+      data: {
+        memberName: `${member.firstName} ${member.lastName || ''}`.trim(),
+        membershipPlan: plan.name,
+        expiryDate: end,
+      },
+      relatedMember: member._id,
+      relatedMembership: membership._id,
+      sentBy: req.user._id,
+    });
+  }
+
   // Brand new record — by definition no Payment has ever referenced it yet.
   const membershipWithBilling = membership.toObject();
   membershipWithBilling.billing = summarizeMembershipBilling(membership.finalAmount, []);
@@ -142,7 +159,11 @@ const renewMembership = asyncHandler(async (req, res) => {
   current.status = 'expired';
   await current.save();
 
-  await Member.findByIdAndUpdate(current.member, { currentMembership: renewal._id, status: 'active' });
+  const member = await Member.findByIdAndUpdate(
+    current.member,
+    { currentMembership: renewal._id, status: 'active' },
+    { new: true }
+  );
 
   await logAudit(req, {
     action: 'renewal',
@@ -150,6 +171,22 @@ const renewMembership = asyncHandler(async (req, res) => {
     targetId: renewal._id,
     description: `Membership renewed (${plan.name})`,
   });
+
+  // Automatic trigger: Membership Renewal confirmation email.
+  if (member?.email) {
+    sendTemplatedEmailAsync({
+      to: member.email,
+      templateType: 'membership_registration', // renewal uses the same confirmation-style wording as a new registration
+      data: {
+        memberName: `${member.firstName} ${member.lastName || ''}`.trim(),
+        membershipPlan: plan.name,
+        expiryDate: end,
+      },
+      relatedMember: member._id,
+      relatedMembership: renewal._id,
+      sentBy: req.user._id,
+    });
+  }
 
   const renewalWithBilling = renewal.toObject();
   renewalWithBilling.billing = summarizeMembershipBilling(renewal.finalAmount, []);
@@ -437,5 +474,4 @@ module.exports = {
   expiringSoon,
   historyForMember,
   outstandingMemberships,
-  calcFinalAmount, // re-exported from utils/billing for backward compatibility with any existing imports
 };

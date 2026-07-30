@@ -6,6 +6,8 @@ import { Toaster } from 'react-hot-toast';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/Auth/LoginPage';
+import ForgotPasswordPage from './pages/Auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/Auth/ResetPasswordPage';
 import UnauthorizedPage from './pages/Auth/UnauthorizedPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import MembersPage from './pages/Members/MembersPage';
@@ -77,6 +79,8 @@ function App() {
       />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
         <Route element={<ProtectedRoute />}>

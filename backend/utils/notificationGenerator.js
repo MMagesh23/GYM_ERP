@@ -4,8 +4,13 @@ const Payment = require('../models/Payment');
 const Maintenance = require('../models/Maintenance');
 const Notification = require('../models/Notification');
 const Settings = require('../models/Settings');
+const { sendTemplatedEmailAsync } = require('./emailService');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Requirement: automatic expiry-reminder emails at these exact day offsets
+// before a membership's endDate (30, 15, 7, 3, and 1 day before expiry).
+const EXPIRY_REMINDER_DAYS = [30, 15, 7, 3, 1];
 
 const todayRange = () => {
   const start = new Date();
@@ -44,6 +49,86 @@ const generateMembershipExpiryReminders = async (daysAhead = 3) => {
   return created;
 };
 
+// @desc  Emails members whose membership expires in exactly N days, for each
+// N in EXPIRY_REMINDER_DAYS (30/15/7/3/1). Runs once a day from the cron job
+// in server.js - "exactly N days" (rather than "within N days") means each
+// member gets at most one reminder email per tier, not a growing pile of
+// duplicate reminders as expiry approaches.
+const generateMembershipExpiryReminderEmails = async () => {
+  let sent = 0;
+
+  for (const daysBefore of EXPIRY_REMINDER_DAYS) {
+    const target = new Date();
+    target.setHours(0, 0, 0, 0);
+    target.setDate(target.getDate() + daysBefore);
+    const rangeEnd = new Date(target.getTime() + DAY_MS);
+
+    const expiring = await Membership.find({
+      status: 'active',
+      endDate: { $gte: target, $lt: rangeEnd },
+    })
+      .populate('member', 'firstName lastName email')
+      .populate('plan', 'name');
+
+    for (const m of expiring) {
+      if (!m.member?.email) continue;
+      sendTemplatedEmailAsync({
+        to: m.member.email,
+        templateType: 'membership_renewal_reminder',
+        data: {
+          memberName: `${m.member.firstName} ${m.member.lastName || ''}`.trim(),
+          membershipPlan: m.plan?.name || '',
+          expiryDate: m.endDate,
+        },
+        relatedMember: m.member._id,
+        relatedMembership: m._id,
+        sentBy: null,
+      });
+      sent += 1;
+    }
+  }
+
+  return sent;
+};
+
+// @desc  Emails members whose membership expired exactly yesterday (i.e. the
+// first daily run after expiry) using the Membership Expiry Notice template.
+// Runs once per membership since the window is exactly one day wide.
+const generateMembershipExpiredEmails = async () => {
+  const { start, end } = (() => {
+    const s = new Date();
+    s.setHours(0, 0, 0, 0);
+    s.setDate(s.getDate() - 1);
+    return { start: s, end: new Date(s.getTime() + DAY_MS) };
+  })();
+
+  const expired = await Membership.find({
+    status: { $in: ['expired', 'active'] }, // status flip to 'expired' may lag a day behind endDate depending on when it's touched
+    endDate: { $gte: start, $lt: end },
+  })
+    .populate('member', 'firstName lastName email')
+    .populate('plan', 'name');
+
+  let sent = 0;
+  for (const m of expired) {
+    if (!m.member?.email) continue;
+    sendTemplatedEmailAsync({
+      to: m.member.email,
+      templateType: 'membership_expiry_notice',
+      data: {
+        memberName: `${m.member.firstName} ${m.member.lastName || ''}`.trim(),
+        membershipPlan: m.plan?.name || '',
+        expiryDate: m.endDate,
+      },
+      relatedMember: m.member._id,
+      relatedMembership: m._id,
+      sentBy: null,
+    });
+    sent += 1;
+  }
+  return sent;
+};
+
 const generatePaymentDueReminders = async () => {
   const pending = await Payment.find({ status: 'pending' }).populate('member', 'firstName lastName');
 
@@ -61,6 +146,36 @@ const generatePaymentDueReminders = async () => {
     created += 1;
   }
   return created;
+};
+
+// @desc  Daily payment-pending reminder emails (separate from the one-time
+// reminder sent by paymentController when a pending payment is first
+// recorded) - keeps nudging until the due is actually collected.
+const generatePaymentDueReminderEmails = async () => {
+  const pending = await Payment.find({ status: 'pending' })
+    .populate('member', 'firstName lastName email')
+    .populate({ path: 'membership', populate: { path: 'plan', select: 'name' } });
+
+  let sent = 0;
+  for (const p of pending) {
+    if (!p.member?.email) continue;
+    if (await alreadyNotifiedToday('payment_due', p.member._id)) continue; // reuse the same daily-dedupe as the system notification above
+    sendTemplatedEmailAsync({
+      to: p.member.email,
+      templateType: 'payment_reminder',
+      data: {
+        memberName: `${p.member.firstName} ${p.member.lastName || ''}`.trim(),
+        membershipPlan: p.membership?.plan?.name || '',
+        amount: p.finalAmount,
+      },
+      relatedMember: p.member._id,
+      relatedMembership: p.membership?._id,
+      relatedPayment: p._id,
+      sentBy: null,
+    });
+    sent += 1;
+  }
+  return sent;
 };
 
 const generateBirthdayWishes = async () => {
@@ -168,13 +283,26 @@ const generateDailyCollectionSummary = async () => {
 
 // Runs every check and returns a summary of how many notifications were created
 const runDailyGeneration = async () => {
-  const [expiry, paymentDue, birthdays, service, lowRevenue, dailySummary] = await Promise.all([
+  const [
+    expiry,
+    paymentDue,
+    birthdays,
+    service,
+    lowRevenue,
+    dailySummary,
+    expiryEmails,
+    expiredEmails,
+    paymentDueEmails,
+  ] = await Promise.all([
     generateMembershipExpiryReminders(),
     generatePaymentDueReminders(),
     generateBirthdayWishes(),
     generateEquipmentServiceDue(),
     generateLowRevenueAlert(),
     generateDailyCollectionSummary(),
+    generateMembershipExpiryReminderEmails(),
+    generateMembershipExpiredEmails(),
+    generatePaymentDueReminderEmails(),
   ]);
 
   return {
@@ -184,8 +312,16 @@ const runDailyGeneration = async () => {
     equipmentServiceDue: service,
     lowRevenueAlert: lowRevenue,
     dailyCollectionSummary: dailySummary,
+    membershipExpiryReminderEmails: expiryEmails,
+    membershipExpiredEmails: expiredEmails,
+    paymentDueReminderEmails: paymentDueEmails,
     total: expiry + paymentDue + birthdays + service + lowRevenue + dailySummary,
   };
 };
 
-module.exports = { runDailyGeneration };
+module.exports = {
+  runDailyGeneration,
+  generateMembershipExpiryReminderEmails,
+  generateMembershipExpiredEmails,
+  generatePaymentDueReminderEmails,
+};

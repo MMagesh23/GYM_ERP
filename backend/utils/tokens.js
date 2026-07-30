@@ -21,10 +21,17 @@ const verifyRefreshToken = (token) => jwt.verify(token, process.env.JWT_REFRESH_
 // Refresh tokens are stored hashed in the DB so a leaked DB dump can't be replayed directly
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+// Password-reset token: a random opaque string, not a JWT. The raw value is
+// emailed to the user (embedded in the reset link) and only its hash is kept
+// server-side (see User.resetPasswordTokenHash), so possessing the DB alone
+// is never enough to reset an account's password.
+const generatePasswordResetToken = () => crypto.randomBytes(32).toString('hex');
+
 module.exports = {
   generateAccessToken,
   generateRefreshToken,
   verifyAccessToken,
   verifyRefreshToken,
   hashToken,
+  generatePasswordResetToken,
 };
