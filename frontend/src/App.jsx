@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
@@ -27,11 +27,29 @@ import { restoreSession } from './redux/slices/authSlice';
 import { fetchSettings } from './redux/slices/settingsSlice';
 import { applyBrandTheme } from './utils/branding';
 
+// Routes that only make sense when the user is NOT logged in. Landing on one
+// of these directly (e.g. a bookmark, or after logout) should never trigger
+// a session-restore attempt — there's nothing to restore into on this page,
+// and doing so is exactly what produced the spurious "No refresh token
+// provided." round trip on first load.
+const PUBLIC_ONLY_ROUTES = ['/login', '/forgot-password', '/reset-password'];
+
 function App() {
   const dispatch = useDispatch();
+  const location = useLocation();
   const { data: settings } = useSelector((state) => state.settings);
 
   useEffect(() => {
+    const isPublicOnlyRoute = PUBLIC_ONLY_ROUTES.includes(location.pathname);
+
+    if (isPublicOnlyRoute) {
+      // Settings (branding, favicon, etc.) still need to load for the login
+      // screen to look right, but skip the auth/me -> auth/refresh chain
+      // entirely — there's no session to restore on a logged-out-only page.
+      dispatch(fetchSettings());
+      return;
+    }
+
     const initializeApp = async () => {
       try {
         await dispatch(restoreSession()).unwrap();
@@ -43,6 +61,9 @@ function App() {
     };
 
     initializeApp();
+    // Intentionally mount-only (matches previous behavior) — route changes
+    // after the initial load don't need to re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
   // Dynamically apply favicon + document title once branding settings load

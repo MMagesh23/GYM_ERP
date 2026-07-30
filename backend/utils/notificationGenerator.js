@@ -180,7 +180,8 @@ const generatePaymentDueReminderEmails = async () => {
 
 const generateBirthdayWishes = async () => {
   const now = new Date();
-  const members = await Member.find({ isDeleted: false, dob: { $ne: null } });
+  // NOTE: members are hard-deleted now — no isDeleted flag to filter on.
+  const members = await Member.find({ dob: { $ne: null } });
 
   let created = 0;
   for (const m of members) {

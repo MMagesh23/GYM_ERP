@@ -60,7 +60,8 @@ const createPayment = asyncHandler(async (req, res) => {
   const closing = await assertDateEditable(new Date(), { isAdmin: req.user.role === 'admin' });
 
   const member = await Member.findById(memberId);
-  if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
+  // NOTE: members are hard-deleted now — no separate isDeleted state to check.
+  if (!member) throw new ApiError(404, 'Member not found.');
 
   let membership = null;
   if (membershipId) {
@@ -306,6 +307,24 @@ const downloadInvoice = asyncHandler(async (req, res) => {
 
   const settings = await Settings.getSingleton();
 
+  // FIX: if the member behind this payment was later hard-deleted,
+  // `payment.member` resolves to null via populate() — fall back to the
+  // identity snapshot taken at deletion time (see memberController.deleteMember)
+  // so the invoice can still be generated instead of crashing.
+  const memberInfo = payment.member
+    ? {
+        memberId: payment.member.memberId,
+        name: `${payment.member.firstName} ${payment.member.lastName || ''}`.trim(),
+        phone: payment.member.phone,
+        email: payment.member.email,
+      }
+    : {
+        memberId: payment.memberSnapshot?.memberId || '—',
+        name: payment.memberSnapshot?.name || 'Deleted member',
+        phone: '',
+        email: '',
+      };
+
   streamInvoicePdf(res, {
     invoiceNumber: invoice.invoiceNumber,
     issuedDate: invoice.issuedDate,
@@ -319,12 +338,7 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       currency: settings.currencySymbol,
       accentColor: settings.invoiceAccentColor,
     },
-    member: {
-      memberId: payment.member.memberId,
-      name: `${payment.member.firstName} ${payment.member.lastName || ''}`.trim(),
-      phone: payment.member.phone,
-      email: payment.member.email,
-    },
+    member: memberInfo,
     lineItems: invoice.lineItems,
     subTotal: invoice.subTotal,
     discount: invoice.discount,
@@ -413,9 +427,17 @@ const exportPayments = asyncHandler(async (req, res) => {
   ];
   payments.forEach((p) => {
     const collected = p.amountPaid ?? p.finalAmount;
+    // FIX: fall back to the memberSnapshot taken at deletion time when
+    // `p.member` no longer resolves (member was hard-deleted), so exports
+    // still identify who the payment belongs to instead of showing blank.
+    const memberLabel = p.member
+      ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}`
+      : p.memberSnapshot?.memberId
+      ? `${p.memberSnapshot.memberId} - ${p.memberSnapshot.name} (deleted)`
+      : '';
     sheet.addRow({
       invoiceNumber: p.invoiceNumber,
-      member: p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '',
+      member: memberLabel,
       amount: p.amount,
       discount: p.discount,
       tax: p.tax,

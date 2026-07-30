@@ -41,11 +41,9 @@ const PlanCard = ({ plan, onEdit, onDeactivate }) => {
           <button onClick={() => onEdit(plan)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
             <Pencil size={15} />
           </button>
-          {plan.isActive && (
-            <button onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
-              <Ban size={15} />
-            </button>
-          )}
+          <button onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
+            <Ban size={15} />
+          </button>
         </div>
       </div>
 
@@ -97,7 +95,7 @@ const PlansPage = () => {
   const [showInactive, setShowInactive] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
-  const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,14 +113,19 @@ const PlansPage = () => {
     load();
   }, [load]);
 
-  const handleDeactivate = async () => {
+  // FIX: previously always called the deactivate-only endpoint and showed
+  // "Plan deactivated" unconditionally. The backend now runs a real, guarded
+  // delete (blocked while in active/frozen use, deactivated instead of
+  // deleted if it has past membership history, hard-deleted only if truly
+  // unused) — this now shows whatever the server actually did.
+  const handleDelete = async () => {
     try {
-      await planApi.deactivate(deactivateTarget._id);
-      toast.success('Plan deactivated');
-      setDeactivateTarget(null);
+      const { data } = await planApi.deactivate(deleteTarget._id);
+      toast.success(data.message || (data.deactivatedInstead ? 'Plan deactivated' : 'Plan deleted'));
+      setDeleteTarget(null);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not deactivate plan');
+      toast.error(err.response?.data?.message || 'Could not delete plan');
     }
   };
 
@@ -186,7 +189,7 @@ const PlansPage = () => {
                 setEditingPlan(plan);
                 setFormOpen(true);
               }}
-              onDeactivate={setDeactivateTarget}
+              onDeactivate={setDeleteTarget}
             />
           ))}
         </div>
@@ -195,13 +198,13 @@ const PlansPage = () => {
       <PlanFormModal open={formOpen} plan={editingPlan} onClose={() => setFormOpen(false)} onSaved={load} />
 
       <ConfirmDialog
-        open={Boolean(deactivateTarget)}
-        title="Deactivate plan"
-        message={`Deactivate "${deactivateTarget?.name}"? Existing memberships on this plan are unaffected, but it won't be offered to new members.`}
-        confirmLabel="Deactivate"
+        open={Boolean(deleteTarget)}
+        title="Delete plan"
+        message={`Delete "${deleteTarget?.name}"? If it has active or frozen memberships, deletion will be blocked. If it has past membership history it will be safely deactivated instead of removed; otherwise it will be permanently deleted.`}
+        confirmLabel="Delete"
         danger
-        onConfirm={handleDeactivate}
-        onClose={() => setDeactivateTarget(null)}
+        onConfirm={handleDelete}
+        onClose={() => setDeleteTarget(null)}
       />
     </div>
   );

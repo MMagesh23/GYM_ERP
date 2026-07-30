@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Pencil, Ban, RotateCcw, KeyRound, UserCog } from 'lucide-react';
+import { Plus, Search, Pencil, Ban, RotateCcw, KeyRound, UserCog, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { staffApi } from '../../services/staffApi';
 import Badge from '../../components/common/Badge';
@@ -21,6 +21,7 @@ const StaffPage = () => {
   const [editingStaff, setEditingStaff] = useState(null);
   const [disableTarget, setDisableTarget] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [credentials, setCredentials] = useState(null);
 
   const fetchStaff = useCallback(
@@ -63,6 +64,21 @@ const StaffPage = () => {
       setCredentials({ email: resetTarget.email, password: data.temporaryPassword });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not reset password');
+    }
+  };
+
+  // NEW — permanent delete. The backend blocks this (409) when the staff
+  // member's linked login account has processed payments or has an
+  // audit-log trail, and returns a clear message explaining to disable
+  // instead — we just surface whatever the server says.
+  const handleDelete = async () => {
+    try {
+      await staffApi.remove(deleteTarget._id);
+      toast.success('Staff member deleted');
+      setDeleteTarget(null);
+      fetchStaff(pagination.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete staff member');
     }
   };
 
@@ -168,6 +184,13 @@ const StaffPage = () => {
                       >
                         {s.status === 'disabled' ? <RotateCcw size={16} /> : <Ban size={16} />}
                       </button>
+                      <button
+                        title="Delete"
+                        onClick={() => setDeleteTarget(s)}
+                        className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -209,6 +232,16 @@ const StaffPage = () => {
         confirmLabel="Reset password"
         onConfirm={handleResetPassword}
         onClose={() => setResetTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete staff member"
+        message={`Permanently delete ${deleteTarget?.name}? This can't be undone. If they've processed payments or have audit-log history, deletion will be blocked — disable their account instead to preserve that history.`}
+        confirmLabel="Delete"
+        danger
+        onConfirm={handleDelete}
+        onClose={() => setDeleteTarget(null)}
       />
 
       <CredentialsModal open={Boolean(credentials)} credentials={credentials} onClose={() => setCredentials(null)} />

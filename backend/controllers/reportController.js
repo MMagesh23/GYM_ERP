@@ -42,7 +42,9 @@ const buildSheet = (workbook, name, columns, rows) => {
 // @desc  Member Report
 // @route GET /api/reports/members?format=xlsx|csv
 const memberReport = asyncHandler(async (req, res) => {
-  const members = await Member.find({ isDeleted: false }).sort({ createdAt: -1 });
+  // NOTE: members are hard-deleted now — no isDeleted flag to filter on;
+  // every remaining Member document is a live member.
+  const members = await Member.find({}).sort({ createdAt: -1 });
   const workbook = new ExcelJS.Workbook();
   buildSheet(
     workbook,
@@ -119,7 +121,14 @@ const paymentReport = asyncHandler(async (req, res) => {
     ],
     payments.map((p) => ({
       invoiceNumber: p.invoiceNumber,
-      member: p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '',
+      // FIX: fall back to memberSnapshot when the member was hard-deleted —
+      // otherwise a deleted member's historical payments would silently show
+      // a blank "Member" column instead of who they belonged to.
+      member: p.member
+        ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}`
+        : p.memberSnapshot?.memberId
+        ? `${p.memberSnapshot.memberId} - ${p.memberSnapshot.name} (deleted)`
+        : '',
       finalAmount: p.finalAmount,
       amountPaid: p.amountPaid ?? p.finalAmount,
       refunded: p.refund?.refundedAmount || 0,
@@ -168,6 +177,10 @@ const expenseReport = asyncHandler(async (req, res) => {
 // partial refund. Now computes gross collections and refunds as two separate,
 // correctly-dated aggregations (see utils/financeCalculations.js) and nets
 // them, matching the same accounting model used by the Finance Dashboard.
+//
+// NOTE: this aggregates straight off Payment/Expense, never Member — so
+// hard-deleting a member (per memberController.deleteMember) has zero effect
+// on these figures; historical payment records are always preserved.
 const computeMonthlyProfit = async (year) => {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);

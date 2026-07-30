@@ -3,8 +3,7 @@ const { body } = require('express-validator');
 const { can } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { authorize } = require('../middleware/rbac');
-const { listPlans, getPlan, createPlan, updatePlan, deactivatePlan } = require('../controllers/membershipPlanController');
+const { listPlans, getPlan, createPlan, updatePlan, deletePlan } = require('../controllers/membershipPlanController');
 
 const router = express.Router();
 
@@ -18,6 +17,10 @@ router.get('/', protect, listPlans);
 router.get('/:id', protect, getPlan);
 router.post('/', protect, can('memberships', 'create'), planValidation, validate, createPlan);
 router.put('/:id', protect, can('memberships', 'update'), updatePlan);
-router.delete('/:id', protect, can('memberships', 'delete'), deactivatePlan);
+// FIX: this used to always soft-deactivate. Now runs a real, guarded delete —
+// see membershipPlanController.deletePlan for the safety rules (blocked while
+// in active/frozen use, deactivated instead of deleted if it has history,
+// hard-deleted only if genuinely unused). Same RBAC permission as before.
+router.delete('/:id', protect, can('memberships', 'delete'), deletePlan);
 
 module.exports = router;

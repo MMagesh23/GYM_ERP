@@ -1,6 +1,8 @@
 const ExcelJS = require('exceljs');
 const Member = require('../models/Member');
 const Payment = require('../models/Payment');
+const Membership = require('../models/Membership');
+const Notification = require('../models/Notification');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -45,7 +47,10 @@ const listMembers = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const { q, status, gender, joinedFrom, joinedTo } = req.query;
 
-  const filter = { isDeleted: false };
+  // NOTE: members are hard-deleted (see deleteMember below), so there is no
+  // `isDeleted` flag to filter on anymore — a member that exists in the
+  // collection is, by definition, not deleted.
+  const filter = {};
   if (status) filter.status = status;
   if (gender) filter.gender = gender;
   if (joinedFrom || joinedTo) {
@@ -84,7 +89,7 @@ const listMembers = asyncHandler(async (req, res) => {
 // @desc  Get a single member's full profile
 // @route GET /api/members/:id
 const getMember = asyncHandler(async (req, res) => {
-  const member = await Member.findOne({ _id: req.params.id, isDeleted: false }).populate({
+  const member = await Member.findById(req.params.id).populate({
     path: 'currentMembership',
     populate: { path: 'plan' },
   });
@@ -129,7 +134,7 @@ const createMember = asyncHandler(async (req, res) => {
 // @desc  Update member details
 // @route PUT /api/members/:id
 const updateMember = asyncHandler(async (req, res) => {
-  const member = await Member.findOne({ _id: req.params.id, isDeleted: false });
+  const member = await Member.findById(req.params.id);
   if (!member) throw new ApiError(404, 'Member not found.');
 
   // memberId is immutable once generated
@@ -142,18 +147,58 @@ const updateMember = asyncHandler(async (req, res) => {
   res.json({ success: true, data: member });
 });
 
-// @desc  Soft-delete a member
+// @desc  Permanently delete a member (hard delete — replaces the old soft-delete).
+//
+// FIX (finance-correctness): a member that only had `isDeleted: true` set
+// still existed in the collection, and — worse — their Membership records
+// stuck around too. Since outstandingMemberships/pendingPayments/dashboard
+// counts all read live off Membership (not Member.isDeleted), a "deleted"
+// member with an active/frozen membership kept counting toward active-member
+// totals, expiring-soon lists, and outstanding-dues figures forever.
+//
+// This now:
+//   1. Cascade-deletes the member's Membership record(s) — a membership
+//      pointing at nobody is meaningless and was exactly what was polluting
+//      those live figures.
+//   2. Preserves Payment records (financial history / revenue & profit are
+//      computed straight off Payment + Expense — see utils/financeCalculations.js
+//      — and must never move just because a member profile was removed).
+//      Snapshots the member's identity onto each payment first, since
+//      `populate('member')` will return null once the member is gone.
+//   3. Removes pending in-app Notifications addressed to this member (nothing
+//      useful comes from notifying about a member who no longer exists).
+//   4. Hard-deletes the Member document itself.
+//
 // @route DELETE /api/members/:id
 const deleteMember = asyncHandler(async (req, res) => {
-  const member = await Member.findOne({ _id: req.params.id, isDeleted: false });
+  const member = await Member.findById(req.params.id);
   if (!member) throw new ApiError(404, 'Member not found.');
 
-  member.isDeleted = true;
-  await member.save();
+  const fullName = `${member.firstName} ${member.lastName || ''}`.trim();
 
-  await logAudit(req, { action: 'delete', module: 'members', targetId: member._id, description: `Deleted member ${member.memberId}` });
+  const [{ deletedCount: membershipsRemoved }] = await Promise.all([
+    Membership.deleteMany({ member: member._id }),
+    Payment.updateMany(
+      { member: member._id },
+      { $set: { memberSnapshot: { memberId: member.memberId, name: fullName } } }
+    ),
+    Notification.deleteMany({ recipientMember: member._id }),
+  ]);
 
-  res.json({ success: true, message: 'Member deleted.' });
+  const paymentsRetained = await Payment.countDocuments({ 'memberSnapshot.memberId': member.memberId });
+
+  await member.deleteOne();
+
+  await logAudit(req, {
+    action: 'delete',
+    module: 'members',
+    targetId: member._id,
+    description:
+      `Permanently deleted member ${member.memberId} (${fullName}) — ` +
+      `${membershipsRemoved} membership record(s) removed, ${paymentsRetained} payment record(s) retained for financial history.`,
+  });
+
+  res.json({ success: true, message: 'Member deleted permanently.' });
 });
 
 // @desc  Change member status (suspend / freeze / reactivate / cancel)
@@ -163,7 +208,7 @@ const changeStatus = asyncHandler(async (req, res) => {
   const allowed = ['active', 'expired', 'suspended', 'freeze', 'cancelled'];
   if (!allowed.includes(status)) throw new ApiError(400, `Status must be one of: ${allowed.join(', ')}`);
 
-  const member = await Member.findOne({ _id: req.params.id, isDeleted: false });
+  const member = await Member.findById(req.params.id);
   if (!member) throw new ApiError(404, 'Member not found.');
 
   const previousStatus = member.status;
@@ -185,7 +230,7 @@ const changeStatus = asyncHandler(async (req, res) => {
 // @route GET /api/members/export
 const exportMembers = asyncHandler(async (req, res) => {
   const { status, q } = req.query;
-  const filter = { isDeleted: false };
+  const filter = {};
   if (status) filter.status = status;
   if (q) {
     filter.$or = [

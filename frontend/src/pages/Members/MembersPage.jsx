@@ -112,10 +112,15 @@ const MembersPage = () => {
     }
   };
 
+  // FIX: members are now hard-deleted (see backend memberController.deleteMember).
+  // Deleting also cascade-removes the member's Membership record(s), which is
+  // why the member list, dashboard stats, and outstanding-dues figures need a
+  // refresh right after — a stale membership pointing at a gone member would
+  // otherwise keep inflating those counts until the next full page reload.
   const handleDelete = async () => {
     try {
       await memberApi.remove(deleteTarget._id);
-      toast.success('Member deleted');
+      toast.success('Member deleted permanently');
       setDeleteTarget(null);
       fetchMembers(pagination.page);
       fetchSummary();
@@ -443,7 +448,7 @@ const MembersPage = () => {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Delete member"
-        message={`Are you sure you want to delete ${deleteTarget?.firstName}? This can't be undone.`}
+        message={`Permanently delete ${deleteTarget?.firstName}? Their membership record(s) will be removed too. Past payments are kept for financial history but will no longer show a linked member profile. This can't be undone.`}
         confirmLabel="Delete"
         danger
         onConfirm={handleDelete}

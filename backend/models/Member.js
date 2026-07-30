@@ -44,7 +44,8 @@ const memberSchema = new mongoose.Schema(
     qrCode: { type: String, default: '' }, // data URL / cloud URL for check-in QR
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    isDeleted: { type: Boolean, default: false }, // soft delete
+    // NOTE: soft-delete (`isDeleted`) removed — members are now hard-deleted.
+    // See memberController.deleteMember for the cascade/finance-preservation logic.
   },
   { timestamps: true }
 );

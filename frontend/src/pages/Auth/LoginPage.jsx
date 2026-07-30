@@ -1,9 +1,9 @@
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { loginUser } from '../../redux/slices/authSlice';
+import { loginUser, clearLoginError } from '../../redux/slices/authSlice';
 
 const LoginPage = () => {
   const {
@@ -14,7 +14,18 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, accessToken, error } = useSelector((state) => state.auth);
+  const { user, accessToken, loginError } = useSelector((state) => state.auth);
+
+  // FIX: previously read `state.auth.error`, which is also written whenever
+  // the app's own silent session-check (restoreSession -> fetchCurrentUser)
+  // fails — which happens on totally normal, non-error paths like landing on
+  // /login with no session cookie yet. `loginError` is only ever set by an
+  // actual failed login attempt (see authSlice.js), so this can no longer
+  // show a stale "No refresh token provided." message that has nothing to do
+  // with what the user just did.
+  useEffect(() => {
+    dispatch(clearLoginError());
+  }, [dispatch]);
 
   useEffect(() => {
     if (user && accessToken) {
@@ -64,7 +75,7 @@ const LoginPage = () => {
             {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
           </div>
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {loginError && <p className="text-xs text-red-500">{loginError}</p>}
 
           <button
             type="submit"

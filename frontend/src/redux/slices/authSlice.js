@@ -31,7 +31,19 @@ const initialState = {
   user: null,
   accessToken: null,
   status: 'idle', // idle | loading | succeeded | failed
+  // FIX: previously a single shared `error` field was written by BOTH
+  // loginUser.rejected AND fetchCurrentUser.rejected. Since restoreSession()
+  // (which calls fetchCurrentUser) runs unconditionally on every app load —
+  // including landing directly on /login with no session cookie yet — the
+  // backend's expected "No refresh token provided." 401 from the silent-
+  // refresh attempt was landing in this shared field and getting rendered
+  // on the Login page as if the user had just failed to log in.
+  //
+  // `loginError` is now written ONLY by loginUser, and is the only field
+  // LoginPage reads. `error` is kept for any other consumer that genuinely
+  // wants the last auth-related error, but nothing renders it directly.
   error: null,
+  loginError: null,
 };
 
 const authSlice = createSlice({
@@ -46,25 +58,31 @@ const authSlice = createSlice({
       state.accessToken = null;
       state.status = 'idle';
     },
+    // Lets LoginPage clear any previous login attempt's error as soon as it
+    // mounts (e.g. after being redirected here from an expired session) —
+    // that redirect is not itself a failed login and shouldn't look like one.
+    clearLoginError: (state) => {
+      state.loginError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
       .addCase(loginUser.pending, (state) => {
         state.status = 'loading';
-        state.error = null;
+        state.loginError = null;
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.user = action.payload.user;
         state.accessToken = action.payload.accessToken;
+        state.loginError = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload;
+        state.loginError = action.payload;
       })
       .addCase(fetchCurrentUser.pending, (state) => {
         state.status = 'loading';
-        state.error = null;
       })
       .addCase(fetchCurrentUser.fulfilled, (state, action) => {
         state.user = action.payload;
@@ -72,6 +90,9 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchCurrentUser.rejected, (state, action) => {
+        // Expected outcome on first load with no session, or an expired one —
+        // never a "login failed" event, so it must never populate loginError.
+        // Kept on `error` (not surfaced anywhere) purely for debugging/devtools.
         state.user = null;
         state.accessToken = null;
         state.status = 'failed';
@@ -79,7 +100,6 @@ const authSlice = createSlice({
       })
       .addCase(restoreSession.pending, (state) => {
         state.status = 'loading';
-        state.error = null;
       })
       .addCase(restoreSession.fulfilled, (state) => {
         state.status = 'succeeded';
@@ -95,5 +115,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setAccessToken, logoutLocal } = authSlice.actions;
+export const { setAccessToken, logoutLocal, clearLoginError } = authSlice.actions;
 export default authSlice.reducer;

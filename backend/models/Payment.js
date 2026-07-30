@@ -50,6 +50,16 @@ const paymentSchema = new mongoose.Schema(
 
     notes: { type: String, default: '' },
     receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+    // NEW — populated only when the referenced `member` is later hard-deleted
+    // (see memberController.deleteMember). Once that happens, `populate('member')`
+    // resolves to null, so invoices/reports/exports fall back to this snapshot
+    // to keep showing who the payment was originally for, without needing to
+    // keep the Member document (or a soft-delete flag) around.
+    memberSnapshot: {
+      memberId: { type: String, default: '' },
+      name: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );

@@ -55,7 +55,9 @@ const createMembership = asyncHandler(async (req, res) => {
   }
 
   const [member, plan] = await Promise.all([Member.findById(memberId), MembershipPlan.findById(planId)]);
-  if (!member || member.isDeleted) throw new ApiError(404, 'Member not found.');
+  // NOTE: members are hard-deleted now, so a missing member is simply "not found" —
+  // there's no separate isDeleted state to check for.
+  if (!member) throw new ApiError(404, 'Member not found.');
   if (!plan || !plan.isActive) throw new ApiError(404, 'Membership plan not found or inactive.');
 
   // A member must not accidentally end up with two live memberships — this guards
@@ -263,7 +265,8 @@ const transferMembership = asyncHandler(async (req, res) => {
   if (current.status !== 'active') throw new ApiError(400, 'Only an active membership can be transferred.');
 
   const toMember = await Member.findById(toMemberId);
-  if (!toMember || toMember.isDeleted) throw new ApiError(404, 'Target member not found.');
+  // NOTE: members are hard-deleted now — no separate isDeleted state to check.
+  if (!toMember) throw new ApiError(404, 'Target member not found.');
   if (String(toMember._id) === String(current.member)) {
     throw new ApiError(400, 'Cannot transfer a membership to the same member it already belongs to.');
   }
@@ -447,7 +450,9 @@ const historyForMember = asyncHandler(async (req, res) => {
 // @desc  Every live (active/frozen) membership that still has money owed on it —
 // i.e. finalAmount not fully covered by linked Payment records. Since nothing
 // auto-bills a membership, this is the only place that surfaces the full list of
-// "who owes what" in one screen, instead of hunting member-by-member.
+// "who owes what" in one screen, instead of hunting member-by-member. Deleting a
+// member cascade-deletes their memberships, so this can never surface a
+// membership belonging to a member who no longer exists.
 // @route GET /api/memberships/outstanding
 const outstandingMemberships = asyncHandler(async (req, res) => {
   const memberships = await Membership.find({ status: { $in: ['active', 'frozen'] } })

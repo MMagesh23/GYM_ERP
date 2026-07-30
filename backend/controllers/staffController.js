@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const Staff = require('../models/Staff');
 const User = require('../models/User');
 const Session = require('../models/Session');
+const AuditLog = require('../models/AuditLog');
+const Payment = require('../models/Payment');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -166,4 +168,43 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Password reset.', temporaryPassword: newPassword });
 });
 
-module.exports = { listStaff, getStaff, createStaff, updateStaff, toggleDisable, resetPassword };
+// @desc  Permanently delete a staff member. Blocked when the linked login
+// account has any historical footprint (payments they processed, or an
+// audit-log trail) — deleting the User in that case would break the
+// "receivedBy"/"user" references those records rely on to identify who did
+// what. In that scenario, disabling (toggleDisable above) is the correct
+// action instead, since it preserves history while blocking access.
+// @route DELETE /api/staff/:id
+const deleteStaff = asyncHandler(async (req, res) => {
+  const staff = await Staff.findById(req.params.id);
+  if (!staff) throw new ApiError(404, 'Staff member not found.');
+
+  if (staff.user) {
+    const [hasPayments, hasAudit] = await Promise.all([
+      Payment.exists({ receivedBy: staff.user }),
+      AuditLog.exists({ user: staff.user }),
+    ]);
+    if (hasPayments || hasAudit) {
+      throw new ApiError(
+        409,
+        `${staff.name} has historical activity on record (payments processed and/or an audit trail) and can't be ` +
+          'permanently deleted, since that would orphan those records. Disable their account instead — that blocks ' +
+          'login immediately while keeping history intact.'
+      );
+    }
+    await Session.deleteMany({ user: staff.user });
+    await User.findByIdAndDelete(staff.user);
+  }
+
+  await staff.deleteOne();
+
+  await logAudit(req, {
+    action: 'delete',
+    module: 'staff',
+    description: `Permanently deleted staff ${staff.employeeId} (${staff.name})`,
+  });
+
+  res.json({ success: true, message: 'Staff member deleted.' });
+});
+
+module.exports = { listStaff, getStaff, createStaff, updateStaff, toggleDisable, resetPassword, deleteStaff };

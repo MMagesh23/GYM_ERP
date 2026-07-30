@@ -39,10 +39,16 @@ const summary = asyncHandler(async (req, res) => {
     expiringMemberships,
     pendingPaymentsAgg,
   ] = await Promise.all([
-    Member.countDocuments({ isDeleted: false }),
-    Member.countDocuments({ isDeleted: false, status: 'active' }),
-    Member.countDocuments({ isDeleted: false, status: 'expired' }),
-    Member.countDocuments({ isDeleted: false, joiningDate: { $gte: monthStart, $lt: nextMonthStart } }),
+    // NOTE: members are hard-deleted (see memberController.deleteMember), so
+    // there is no `isDeleted` flag to filter on anymore — every remaining
+    // Member document is, by definition, not deleted. Deleting a member also
+    // cascade-deletes their Membership record(s), so a deleted member can
+    // never keep contributing to activeMembers / expiringMemberships /
+    // pendingPayments below either.
+    Member.countDocuments({}),
+    Member.countDocuments({ status: 'active' }),
+    Member.countDocuments({ status: 'expired' }),
+    Member.countDocuments({ joiningDate: { $gte: monthStart, $lt: nextMonthStart } }),
     // FIX: previously matched status $in ['paid','partial'] BEFORE summing,
     // which excluded the ENTIRE amount of any payment later touched by a
     // refund (status becomes 'refunded'/'partially_refunded'). Now sums gross
@@ -65,6 +71,8 @@ const summary = asyncHandler(async (req, res) => {
     // Every live (active/frozen) membership that still has money owed on it —
     // invoiced minus actually-collected, net of refunds. Nothing auto-bills a
     // membership, so this is the only place that surfaces "who owes what".
+    // Deleting a member cascade-deletes their memberships, so this can never
+    // include a membership belonging to a member who no longer exists.
     Membership.aggregate([
       { $match: { status: { $in: ['active', 'frozen'] } } },
       { $lookup: { from: 'payments', localField: '_id', foreignField: 'membership', as: 'pmts' } },
@@ -148,7 +156,7 @@ const charts = asyncHandler(async (req, res) => {
       { $group: { _id: { $month: '$expenseDate' }, total: { $sum: '$amount' } } },
     ]),
     Member.aggregate([
-      { $match: { joiningDate: { $gte: start, $lt: end }, isDeleted: false } },
+      { $match: { joiningDate: { $gte: start, $lt: end } } },
       { $group: { _id: { $month: '$joiningDate' }, count: { $sum: 1 } } },
     ]),
     Membership.aggregate([

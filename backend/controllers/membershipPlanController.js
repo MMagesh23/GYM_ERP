@@ -1,4 +1,5 @@
 const MembershipPlan = require('../models/MembershipPlan');
+const Membership = require('../models/Membership');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -93,18 +94,61 @@ const updatePlan = asyncHandler(async (req, res) => {
   res.json({ success: true, data: plan });
 });
 
-// @desc  Deactivate a plan (soft delete - preserves history for existing memberships)
+// @desc  Delete a membership plan. Replaces the old always-deactivate
+// behavior with a real, safe delete:
+//   - If the plan has any ACTIVE or FROZEN membership on it right now,
+//     deletion is blocked outright — an existing member is still relying
+//     on this plan's terms (price, freeze days, renewal cap).
+//   - If the plan has no live memberships but DOES have historical ones
+//     (expired/cancelled/upgraded/transferred), it is deactivated instead
+//     of hard-deleted — historical membership/payment/report records
+//     reference this plan by id and must keep resolving correctly.
+//   - If the plan has never been used by any membership, it's safe to
+//     hard-delete outright.
 // @route DELETE /api/membership-plans/:id
-const deactivatePlan = asyncHandler(async (req, res) => {
+const deletePlan = asyncHandler(async (req, res) => {
   const plan = await MembershipPlan.findById(req.params.id);
   if (!plan) throw new ApiError(404, 'Membership plan not found.');
 
-  plan.isActive = false;
-  await plan.save();
+  const inUse = await Membership.exists({ plan: plan._id, status: { $in: ['active', 'frozen'] } });
+  if (inUse) {
+    throw new ApiError(
+      409,
+      'This plan has active or frozen memberships assigned. It cannot be deleted while members are on it — ' +
+        'wait for those memberships to end, or move them to a different plan first.'
+    );
+  }
 
-  await logAudit(req, { action: 'delete', module: 'memberships', targetId: plan._id, description: `Deactivated plan "${plan.name}"` });
+  const hasHistory = await Membership.exists({ plan: plan._id });
+  if (hasHistory) {
+    plan.isActive = false;
+    await plan.save();
 
-  res.json({ success: true, message: 'Plan deactivated.' });
+    await logAudit(req, {
+      action: 'update',
+      module: 'memberships',
+      targetId: plan._id,
+      description: `Deactivated plan "${plan.name}" (has membership history, so it was deactivated rather than deleted to keep reports accurate)`,
+    });
+
+    return res.json({
+      success: true,
+      data: plan,
+      deactivatedInstead: true,
+      message: 'This plan has past membership history, so it was deactivated instead of permanently deleted.',
+    });
+  }
+
+  await plan.deleteOne();
+
+  await logAudit(req, {
+    action: 'delete',
+    module: 'memberships',
+    targetId: plan._id,
+    description: `Permanently deleted unused plan "${plan.name}"`,
+  });
+
+  res.json({ success: true, message: 'Plan permanently deleted.' });
 });
 
-module.exports = { listPlans, getPlan, createPlan, updatePlan, deactivatePlan, DURATION_DAYS };
+module.exports = { listPlans, getPlan, createPlan, updatePlan, deletePlan, DURATION_DAYS };
