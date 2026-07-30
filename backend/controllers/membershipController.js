@@ -2,6 +2,7 @@ const Membership = require('../models/Membership');
 const MembershipPlan = require('../models/MembershipPlan');
 const Member = require('../models/Member');
 const Payment = require('../models/Payment');
+const Settings = require('../models/Settings');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
@@ -15,6 +16,7 @@ const {
   summarizeMembershipBilling,
 } = require('../utils/billing');
 const { sendTemplatedEmailAsync } = require('../utils/emailService');
+const { getExpiryWindow, calcDaysRemaining } = require('../utils/membershipExpiry');
 
 // Shared by historyForMember and anywhere else that needs "how much of each of
 // these memberships has actually been collected" — see utils/billing.js for why
@@ -418,20 +420,32 @@ const cancelMembership = asyncHandler(async (req, res) => {
 
 // @desc  Memberships expiring within N days (for reminders / dashboard)
 // @route GET /api/memberships/expiring?days=7
+//
+// FIX: previously computed the window as `now + days*DAY_MS` against the
+// SERVER's clock. Now uses the shared, timezone-aware window (evaluated
+// against Settings.timeZone) — see utils/membershipExpiry.js — so this can
+// never disagree with the dashboard's expiring-memberships list.
 const expiringSoon = asyncHandler(async (req, res) => {
-  const days = Number(req.query.days) || 7;
-  const now = new Date();
-  const until = new Date(now.getTime() + days * DAY_MS);
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 30);
+  const settings = await Settings.getSingleton();
+  const { todayStart, windowEnd } = getExpiryWindow(settings.timeZone, days);
 
   const memberships = await Membership.find({
     status: 'active',
-    endDate: { $gte: now, $lte: until },
+    endDate: { $gte: todayStart, $lt: windowEnd },
   })
     .populate('member', 'memberId firstName lastName phone email')
     .populate('plan', 'name')
     .sort({ endDate: 1 });
 
-  res.json({ success: true, data: memberships });
+  // NEW: daysRemaining via the same shared utility the dashboard uses.
+  const withDaysRemaining = memberships.map((m) => {
+    const plain = m.toObject();
+    plain.daysRemaining = calcDaysRemaining(m.endDate, settings.timeZone);
+    return plain;
+  });
+
+  res.json({ success: true, data: withDaysRemaining });
 });
 
 // @desc  Full membership history for a given member
@@ -479,4 +493,5 @@ module.exports = {
   expiringSoon,
   historyForMember,
   outstandingMemberships,
+  attachBillingSummaries, // NEW — reused by dashboardController's expiring-memberships endpoint
 };

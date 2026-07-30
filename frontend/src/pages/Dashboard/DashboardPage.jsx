@@ -7,6 +7,7 @@ import { dashboardApi } from '../../services/dashboardApi';
 import { SkeletonCard } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
 import StatCard from '../../components/common/StatCard';
+import ExpiringMembershipsSection from './ExpiringMembershipsSection';
 import { formatCurrency } from '../../utils/memberHelpers';
 import {
   Users, UserCheck, UserX, UserPlus, Wallet, TrendingDown, TrendingUp,
@@ -236,6 +237,16 @@ const DashboardPage = () => {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* NEW — detailed "Memberships Expiring in 7 Days" section. Gated
+              on the same 'membershipsExpiringSoon' widget key the summary
+              card already uses, so it respects the existing dashboard-widget
+              configuration without introducing a second toggle. */}
+          {allowedWidgets.includes('membershipsExpiringSoon') && (
+            <div className="mt-6">
+              <ExpiringMembershipsSection />
             </div>
           )}
         </>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Search, Download, Upload, Pencil, Trash2, Ban, RotateCcw,
   Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard,
@@ -51,6 +51,11 @@ const DuesChip = ({ billing }) => {
 const MembersPage = () => {
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // NEW — read from the URL so Dashboard's "View All" (?expiring=7) lands
+  // here with the filter already applied.
+  const expiringDays = searchParams.get('expiring');
+
   const [members, setMembers] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
@@ -67,10 +72,16 @@ const MembersPage = () => {
 
   const fetchMembers = useCallback(
     async (page = 1) => {
-      const isFirstLoad = pagination.total === 0 && !q && !status;
+      const isFirstLoad = pagination.total === 0 && !q && !status && !expiringDays;
       isFirstLoad ? setLoading(true) : setRefreshing(true);
       try {
-        const { data } = await memberApi.list({ page, limit: 20, q: q || undefined, status: status || undefined });
+        const { data } = await memberApi.list({
+          page,
+          limit: 20,
+          q: q || undefined,
+          status: status || undefined,
+          expiringDays: expiringDays || undefined,
+        });
         setMembers(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
@@ -80,7 +91,7 @@ const MembersPage = () => {
         setRefreshing(false);
       }
     },
-    [q, status] // eslint-disable-line react-hooks/exhaustive-deps
+    [q, status, expiringDays] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const fetchSummary = useCallback(async () => {
@@ -173,9 +184,14 @@ const MembersPage = () => {
   const clearFilters = () => {
     setQ('');
     setStatus('');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('expiring');
+      return next;
+    });
   };
 
-  const hasFilters = Boolean(q || status);
+  const hasFilters = Boolean(q || status || expiringDays);
 
   const statCards = useMemo(
     () => [
@@ -236,6 +252,28 @@ const MembersPage = () => {
           <StatCard key={s.label} {...s} loading={!summary} />
         ))}
       </div>
+
+      {/* NEW — banner shown when landing here via Dashboard's "View All"
+          (?expiring=N), so it's obvious a filter is applied and easy to clear. */}
+      {expiringDays && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <span>
+            Showing members whose active membership expires within {expiringDays} day{expiringDays === '1' ? '' : 's'}.
+          </span>
+          <button
+            onClick={() =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('expiring');
+                return next;
+              })
+            }
+            className="text-xs font-medium underline hover:no-underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">

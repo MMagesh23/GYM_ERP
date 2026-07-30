@@ -6,7 +6,10 @@ const membershipSchema = new mongoose.Schema(
     plan: { type: mongoose.Schema.Types.ObjectId, ref: 'MembershipPlan', required: true },
 
     startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
+    // NEW — indexed: supports the "active memberships expiring within N
+    // days" range query used by the dashboard, membershipController.expiringSoon,
+    // and the Members page's expiry filter.
+    endDate: { type: Date, required: true, index: true },
 
     status: {
       type: String,
@@ -45,5 +48,9 @@ const membershipSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// NEW — compound index matching the exact query shape used everywhere
+// "expiring soon" is computed: equality on status + range on endDate.
+membershipSchema.index({ status: 1, endDate: 1 });
 
 module.exports = mongoose.model('Membership', membershipSchema);

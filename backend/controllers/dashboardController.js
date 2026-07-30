@@ -6,6 +6,9 @@ const {
   GROSS_COLLECTED_EXPR,
   round2,
 } = require('../utils/financeCalculations');
+const { getExpiryWindow, calcDaysRemaining, expiryStatusLabel } = require('../utils/membershipExpiry');
+const { hasPermission } = require('../middleware/rbac');
+const { attachBillingSummaries } = require('./membershipController');
 
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
@@ -15,7 +18,6 @@ const Expense = require('../models/Expense');
 const Equipment = require('../models/Equipment');
 const asyncHandler = require('../utils/asyncHandler');
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const startOfMonth = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), 1);
 const startOfNextMonth = (d = new Date()) => new Date(d.getFullYear(), d.getMonth() + 1, 1);
 
@@ -25,7 +27,13 @@ const summary = asyncHandler(async (req, res) => {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = startOfNextMonth(now);
-  const soon = new Date(now.getTime() + 7 * DAY_MS);
+
+  const settings = await Settings.getSingleton();
+  // FIX: previously `now + 7*DAY_MS` in the SERVER's timezone. Now uses the
+  // same shared, timezone-aware window (Settings.timeZone) as the detailed
+  // expiring-memberships list below, so the count card and the list can
+  // never disagree.
+  const { todayStart, windowEnd: expiringWindowEnd } = getExpiryWindow(settings.timeZone, 7, now);
 
   const [
     totalMembers,
@@ -36,7 +44,7 @@ const summary = asyncHandler(async (req, res) => {
     monthlyRefundsAgg,
     monthlyExpenseAgg,
     equipmentCount,
-    expiringMemberships,
+    expiringMembershipsCount,
     pendingPaymentsAgg,
   ] = await Promise.all([
     // NOTE: members are hard-deleted (see memberController.deleteMember), so
@@ -67,7 +75,9 @@ const summary = asyncHandler(async (req, res) => {
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
     Equipment.countDocuments({ status: { $ne: 'retired' } }),
-    Membership.countDocuments({ status: 'active', endDate: { $gte: now, $lte: soon } }),
+    // FIX: uses the shared, timezone-aware expiry window instead of a raw
+    // server-clock offset — see utils/membershipExpiry.js.
+    Membership.countDocuments({ status: 'active', endDate: { $gte: todayStart, $lt: expiringWindowEnd } }),
     // Every live (active/frozen) membership that still has money owed on it —
     // invoiced minus actually-collected, net of refunds. Nothing auto-bills a
     // membership, so this is the only place that surfaces "who owes what".
@@ -122,12 +132,11 @@ const summary = asyncHandler(async (req, res) => {
     monthlyExpenses,
     netProfit: round2(monthlyRevenue - monthlyExpenses),
     equipmentCount,
-    membershipsExpiringSoon: expiringMemberships,
+    membershipsExpiringSoon: expiringMembershipsCount,
     pendingPayments,
     pendingPaymentsCount,
   };
 
-  const settings = await Settings.getSingleton();
   const allowedWidgets = await resolveAllowedWidgets(req.user, settings);
   const filtered = pickFields(summaryData, allowedWidgets, 'summaryFields');
 
@@ -194,4 +203,89 @@ const charts = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { year, ...filtered }, allowedWidgets });
 });
 
-module.exports = { summary, charts };
+// @desc  Detailed list of active memberships expiring within `days` (default
+// 7, inclusive) of today, evaluated against the gym's business timezone —
+// see utils/membershipExpiry.js, the single shared source of truth for this
+// calculation across the dashboard, member/membership pages, and reports.
+//
+// Kept as its own endpoint rather than folded into /dashboard/summary so the
+// lightweight summary payload never carries the full list + per-member
+// billing lookups, and so "View All" can page through the full result set
+// independently.
+// @route GET /api/dashboard/expiring-memberships?days=7&page=1&limit=10
+const expiringMemberships = asyncHandler(async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 30);
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 10, 100);
+
+  const settings = await Settings.getSingleton();
+  const { todayStart, windowEnd } = getExpiryWindow(settings.timeZone, days);
+
+  // Only 'active' memberships count down — a frozen membership's endDate was
+  // already pushed out by the freeze itself (see membershipController.
+  // freezeMembership), so it isn't "expiring" the same way. This matches the
+  // existing summary card and membershipController.expiringSoon, both of
+  // which also filter to status: 'active' only.
+  const filter = { status: 'active', endDate: { $gte: todayStart, $lt: windowEnd } };
+
+  // Fetched unpaginated-from-Mongo (bounded to a single gym's expiry window,
+  // inherently small) so the days-remaining → expiry-date → member-name
+  // tie-break sort applies across the WHOLE result set, not just one page.
+  // Uses populate() (not $lookup) specifically to avoid the classic
+  // aggregation-lookup member-duplication pitfall.
+  const memberships = await Membership.find(filter)
+    .populate('member', 'memberId firstName lastName phone email')
+    .populate('plan', 'name')
+    .sort({ endDate: 1 });
+
+  // Defensive: skip anything whose member or plan didn't resolve. A
+  // hard-deleted member cascade-deletes their memberships (see
+  // memberController.deleteMember), so this should never actually happen —
+  // but never surface a broken/orphaned row if it somehow does.
+  const valid = memberships.filter((m) => m.member && m.plan);
+
+  const canViewFinance = await hasPermission(req.user, 'finance', 'view');
+  // Reuses membershipController's existing billing-summary logic rather than
+  // re-deriving outstanding-balance math here.
+  const withBilling = canViewFinance ? await attachBillingSummaries(valid) : valid;
+
+  const rows = withBilling
+    .map((m) => {
+      const daysRemaining = calcDaysRemaining(m.endDate, settings.timeZone);
+      return {
+        membershipId: m._id,
+        memberId: m.member._id,
+        memberDisplayId: m.member.memberId,
+        memberName: `${m.member.firstName} ${m.member.lastName || ''}`.trim(),
+        memberPhone: m.member.phone,
+        memberEmail: m.member.email,
+        planName: m.plan.name,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        daysRemaining,
+        status: m.status,
+        expiryStatus: expiryStatusLabel(daysRemaining),
+        // Omitted entirely (not just zeroed) for users without finance view
+        // permission — JSON.stringify drops `undefined` keys.
+        outstanding: canViewFinance ? (m.billing?.outstanding ?? 0) : undefined,
+      };
+    })
+    .sort((a, b) => {
+      if (a.daysRemaining !== b.daysRemaining) return a.daysRemaining - b.daysRemaining;
+      const dateDiff = new Date(a.endDate) - new Date(b.endDate);
+      if (dateDiff !== 0) return dateDiff;
+      return a.memberName.localeCompare(b.memberName);
+    });
+
+  const total = rows.length;
+  const start = (page - 1) * limit;
+  const paged = rows.slice(start, start + limit);
+
+  res.json({
+    success: true,
+    data: paged,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+  });
+});
+
+module.exports = { summary, charts, expiringMemberships };

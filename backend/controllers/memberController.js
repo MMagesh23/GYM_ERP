@@ -3,12 +3,14 @@ const Member = require('../models/Member');
 const Payment = require('../models/Payment');
 const Membership = require('../models/Membership');
 const Notification = require('../models/Notification');
+const Settings = require('../models/Settings');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { generateMemberId } = require('../utils/idGenerator');
 const { summarizeMembershipBilling } = require('../utils/billing');
 const { sendTemplatedEmailAsync } = require('../utils/emailService');
+const { getExpiryWindow } = require('../utils/membershipExpiry');
 
 // Attaches a `billing` summary (invoiced/collected/outstanding/status) onto each
 // member's currentMembership so list/profile views can show "this member owes
@@ -41,11 +43,11 @@ const attachCurrentMembershipBilling = async (members) => {
 };
 
 // @desc  List members with pagination, search, and filters
-// @route GET /api/members?page=1&limit=20&q=&status=&gender=
+// @route GET /api/members?page=1&limit=20&q=&status=&gender=&expiringDays=
 const listMembers = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.min(Number(req.query.limit) || 20, 100);
-  const { q, status, gender, joinedFrom, joinedTo } = req.query;
+  const { q, status, gender, joinedFrom, joinedTo, expiringDays } = req.query;
 
   // NOTE: members are hard-deleted (see deleteMember below), so there is no
   // `isDeleted` flag to filter on anymore — a member that exists in the
@@ -66,6 +68,22 @@ const listMembers = asyncHandler(async (req, res) => {
       { email: { $regex: q, $options: 'i' } },
       { memberId: { $regex: q, $options: 'i' } },
     ];
+  }
+
+  // NEW — "expiring within N days" filter, used by the Dashboard's
+  // "Memberships Expiring in 7 Days" → View All action. Resolves matching
+  // Membership records via the same shared, timezone-aware window used
+  // everywhere else (see utils/membershipExpiry.js), then narrows the member
+  // filter to just those members, rather than re-deriving the expiry math.
+  if (expiringDays) {
+    const days = Math.min(Math.max(Number(expiringDays) || 7, 1), 30);
+    const settings = await Settings.getSingleton();
+    const { todayStart, windowEnd } = getExpiryWindow(settings.timeZone, days);
+    const expiringMemberIds = await Membership.find({
+      status: 'active',
+      endDate: { $gte: todayStart, $lt: windowEnd },
+    }).distinct('member');
+    filter._id = { $in: expiringMemberIds };
   }
 
   const [members, total] = await Promise.all([

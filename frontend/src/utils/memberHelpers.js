@@ -128,3 +128,14 @@ export const estimatePlanChangeAmount = (currentMembership, newPlan) => {
 
   return { remainingDays, unusedCredit, newPlanCost, amountDue };
 };
+
+// NEW — maps the backend's expiryStatus key (see backend/utils/membershipExpiry.js
+// #expiryStatusLabel) to exact badge wording. Kept here (not derived from the
+// key via string replace) since "2–3 Days Left" needs an en dash Badge's
+// generic underscore→space conversion can't produce.
+export const expiryBadge = (daysRemaining) => {
+  if (daysRemaining <= 0) return { status: 'expires_today', label: 'Expires Today' };
+  if (daysRemaining === 1) return { status: '1_day_left', label: '1 Day Left' };
+  if (daysRemaining <= 3) return { status: '2_3_days_left', label: '2–3 Days Left' };
+  return { status: '4_7_days_left', label: '4–7 Days Left' };
+};
