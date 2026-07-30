@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema(
   {
-    memberId: { type: String, required: true, unique: true }, // auto-generated e.g. GYM001
+    memberId: { type: String, required: true, unique: true }, // auto-generated e.g. GYM0001
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, trim: true },
     photo: { type: String, default: '' },

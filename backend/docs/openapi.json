@@ -15,7 +15,7 @@
         "type": "object",
         "properties": {
           "_id": { "type": "string" },
-          "memberId": { "type": "string", "example": "GYM007" },
+          "memberId": { "type": "string", "example": "GYM0007" },
           "firstName": { "type": "string" },
           "lastName": { "type": "string" },
           "gender": { "type": "string", "enum": ["male", "female", "other"] },

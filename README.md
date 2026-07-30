@@ -100,7 +100,7 @@ role-aware sidebar (Admin sees Expenses/Staff/Reports/Settings; Receptionist doe
 
 **Backend**
 - `models/Counter.js` — generic atomic-increment counter, reused for Member/Staff/Equipment/Invoice IDs.
-- `utils/idGenerator.js` — generates `GYM001`-style member IDs off the Settings prefix.
+- `utils/idGenerator.js` — generates `GYM0001`-style member IDs off the Settings prefix.
 - `middleware/upload.js` — multer config for photo uploads and CSV/Excel import files.
 - `controllers/memberController.js` + `routes/memberRoutes.js` — full CRUD, pagination,
   search (name/phone/email/memberId), status filter, status transitions (suspend/freeze/

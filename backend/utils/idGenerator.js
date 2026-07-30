@@ -15,7 +15,7 @@ const generateSequentialId = async (prefixField, counterField, pad = 3) => {
   return `${prefix}${String(seq).padStart(pad, '0')}`;
 };
 
-const generateMemberId = () => generateSequentialId('memberIdPrefix', 'lastMemberSequence', 3);
+const generateMemberId = () => generateSequentialId('memberIdPrefix', 'lastMemberSequence', 4);
 
 // Independent counters for other entities (not tied to the gym's member prefix)
 const Counter = require('../models/Counter');
