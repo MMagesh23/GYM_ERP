@@ -1,16 +1,14 @@
 import api from './api';
 
 export const whatsappTemplateApi = {
-  list: () => api.get('/whatsapp-templates'),
-  get: (type) => api.get(`/whatsapp-templates/${type}`),
-  update: (type, payload) => api.put(`/whatsapp-templates/${type}`, payload),
-  reset: (type) => api.post(`/whatsapp-templates/${type}/reset`),
-  preview: (type, overrides) => api.post(`/whatsapp-templates/${type}/preview`, overrides || {}),
-  generate: (type, payload) => api.post(`/whatsapp-templates/${type}/generate`, payload),
+  list: (language) => api.get('/whatsapp-templates', { params: { language } }),
+  get: (type, language) => api.get(`/whatsapp-templates/${type}`, { params: { language } }),
+  update: (type, payload, language) => api.put(`/whatsapp-templates/${type}`, payload, { params: { language } }),
+  reset: (type, language) => api.post(`/whatsapp-templates/${type}/reset`, {}, { params: { language } }),
+  preview: (type, overrides, language) => api.post(`/whatsapp-templates/${type}/preview`, overrides || {}, { params: { language } }),
+  generate: (type, payload) => api.post(`/whatsapp-templates/${type}/generate`, payload), // language goes in the body — see modal
 };
 
 export const whatsappLogApi = {
-  // Best-effort, optional activity logging — never lets a failure here
-  // interfere with the actual copy/open action the user already performed.
   record: (payload) => api.post('/whatsapp-logs', payload).catch(() => {}),
 };

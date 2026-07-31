@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Copy, ExternalLink, MessageCircle, Loader2, AlertTriangle, Phone } from 'lucide-react';
+import { Copy, ExternalLink, MessageCircle, Loader2, AlertTriangle, Phone, Globe } from 'lucide-react';
 import Modal from './Modal';
 import { whatsappTemplateApi, whatsappLogApi } from '../../services/whatsappApi';
 
@@ -13,16 +13,18 @@ const TEMPLATE_TYPE_LABELS = {
   general_announcement: 'General Announcement',
 };
 
+// NEW — supported message languages. Kept in sync with
+// backend/models/WhatsappTemplate.js#SUPPORTED_LANGUAGES/LANGUAGE_LABELS.
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'ta', label: 'தமிழ் (Tamil)' },
+];
+
 /**
  * The single, reusable WhatsApp communication component — used from the
  * Dashboard's expiring-memberships section, the Members list, and the
- * Member Profile page. Every consumer passes in the member (and optionally
- * a membership/payment for placeholder context) and gets the exact same
- * generate -> preview -> copy -> (optionally) open-WhatsApp workflow, so the
- * message-generation logic is never duplicated across pages.
- *
- * This component NEVER sends a message. It only prepares text for staff to
- * paste into WhatsApp themselves — see backend/controllers/whatsappTemplateController.js.
+ * Member Profile page. Never sends anything — only prepares text for staff
+ * to paste into WhatsApp themselves.
  */
 const WhatsAppCommunicationModal = ({
   open,
@@ -31,14 +33,16 @@ const WhatsAppCommunicationModal = ({
   membership,
   paymentId,
   defaultTemplateType = 'membership_expiry_reminder',
+  defaultLanguage = 'en',
 }) => {
   const [templateType, setTemplateType] = useState(defaultTemplateType);
+  const [language, setLanguage] = useState(defaultLanguage);
   const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState(null); // { message, phone, warnings, unknownPlaceholders }
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const generate = useCallback(
-    async (type) => {
+    async (type, lang) => {
       if (!member?._id) return;
       setGenerating(true);
       setError(null);
@@ -47,6 +51,7 @@ const WhatsAppCommunicationModal = ({
           memberId: member._id,
           membershipId: membership?._id,
           paymentId,
+          language: lang,
         });
         setResult(data.data);
         whatsappLogApi.record({ memberId: member._id, templateType: type, action: 'generated' });
@@ -62,16 +67,22 @@ const WhatsAppCommunicationModal = ({
   useEffect(() => {
     if (open) {
       setTemplateType(defaultTemplateType);
+      setLanguage(defaultLanguage);
       setResult(null);
       setError(null);
-      generate(defaultTemplateType);
+      generate(defaultTemplateType, defaultLanguage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleTemplateChange = (type) => {
     setTemplateType(type);
-    generate(type);
+    generate(type, language);
+  };
+
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
+    generate(templateType, lang);
   };
 
   const handleCopy = async () => {
@@ -80,9 +91,6 @@ const WhatsAppCommunicationModal = ({
       await navigator.clipboard.writeText(result.message);
       toast.success('Message copied. Paste it into WhatsApp to send.');
     } catch (err) {
-      // Clipboard API can fail (unsupported browser, insecure context,
-      // permission denied) — fall back to a manual select-and-copy path
-      // instead of leaving the user with no way to copy at all.
       try {
         const textarea = document.createElement('textarea');
         textarea.value = result.message;
@@ -126,17 +134,33 @@ const WhatsAppCommunicationModal = ({
         </div>
       </div>
 
-      <div className="mb-4">
-        <label className="mb-1 block text-sm font-medium">Template</label>
-        <select
-          value={templateType}
-          onChange={(e) => handleTemplateChange(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-        >
-          {Object.entries(TEMPLATE_TYPE_LABELS).map(([type, label]) => (
-            <option key={type} value={type}>{label}</option>
-          ))}
-        </select>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium">Template</label>
+          <select
+            value={templateType}
+            onChange={(e) => handleTemplateChange(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+          >
+            {Object.entries(TEMPLATE_TYPE_LABELS).map(([type, label]) => (
+              <option key={type} value={type}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 flex items-center gap-1 text-sm font-medium">
+            <Globe size={13} /> Language
+          </label>
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {generating && (
@@ -150,7 +174,7 @@ const WhatsAppCommunicationModal = ({
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <div className="flex-1">
             <p>{error}</p>
-            <button onClick={() => generate(templateType)} className="mt-1 text-xs font-medium underline hover:no-underline">
+            <button onClick={() => generate(templateType, language)} className="mt-1 text-xs font-medium underline hover:no-underline">
               Retry
             </button>
           </div>
@@ -159,7 +183,10 @@ const WhatsAppCommunicationModal = ({
 
       {!generating && !error && result && (
         <>
-          <div className="mb-3 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
+          <div
+            lang={language === 'ta' ? 'ta' : 'en'}
+            className="mb-3 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900"
+          >
             {result.message}
           </div>
 
