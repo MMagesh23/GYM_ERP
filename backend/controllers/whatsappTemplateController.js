@@ -8,9 +8,9 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAudit = require('../utils/logAudit');
 const { hasPermission } = require('../middleware/rbac');
-const { attachBillingSummaries } = require('./membershipController');
-const { calcDaysRemaining } = require('../utils/membershipExpiry');
-const { DEFAULT_TEMPLATES, TAMIL_TEMPLATES } = require('../utils/whatsappTemplatesDefault');
+const { attachBillingSummaries } = require('./membershipController'); // REUSED — never re-derived
+const { calcDaysRemaining } = require('../utils/membershipExpiry'); // REUSED — never re-derived
+const { DEFAULT_TEMPLATES } = require('../utils/whatsappTemplatesDefault');
 const {
   getOrSeedWhatsappTemplate,
   findUnknownPlaceholders,
@@ -20,53 +20,33 @@ const {
   PHONE_INVALID_REASONS,
 } = require('../utils/whatsappService');
 
-const DEFAULTS_BY_LANGUAGE = { en: DEFAULT_TEMPLATES, ta: TAMIL_TEMPLATES };
-
-// Resolves & validates the `language` query/body param, defaulting to 'en'
-// so every call site that predates multi-language support keeps working
-// with no change in behavior.
-const resolveLanguage = (raw) => {
-  const language = raw || 'en';
-  if (!WhatsappTemplate.SUPPORTED_LANGUAGES.includes(language)) {
-    throw new ApiError(400, `Unsupported language "${language}". Supported: ${WhatsappTemplate.SUPPORTED_LANGUAGES.join(', ')}.`);
-  }
-  return language;
-};
-
-// @desc  List all WhatsApp templates for a language (seeding defaults on first access)
-// @route GET /api/whatsapp-templates?language=en|ta
+// @desc  List all WhatsApp templates (seeding defaults on first access)
+// @route GET /api/whatsapp-templates
 const listTemplates = asyncHandler(async (req, res) => {
-  const language = resolveLanguage(req.query.language);
-  const templates = await Promise.all(WhatsappTemplate.TEMPLATE_TYPES.map((type) => getOrSeedWhatsappTemplate(type, language)));
-  res.json({
-    success: true,
-    data: templates,
-    placeholders: WhatsappTemplate.SUPPORTED_PLACEHOLDERS,
-    languages: WhatsappTemplate.SUPPORTED_LANGUAGES,
-    languageLabels: WhatsappTemplate.LANGUAGE_LABELS,
-  });
+  const templates = await Promise.all(WhatsappTemplate.TEMPLATE_TYPES.map((type) => getOrSeedWhatsappTemplate(type)));
+  res.json({ success: true, data: templates, placeholders: WhatsappTemplate.SUPPORTED_PLACEHOLDERS });
 });
 
 // @desc  Get a single WhatsApp template
-// @route GET /api/whatsapp-templates/:type?language=en|ta
+// @route GET /api/whatsapp-templates/:type
 const getTemplate = asyncHandler(async (req, res) => {
   if (!WhatsappTemplate.TEMPLATE_TYPES.includes(req.params.type)) {
     throw new ApiError(404, 'Unknown WhatsApp template type.');
   }
-  const language = resolveLanguage(req.query.language);
-  const template = await getOrSeedWhatsappTemplate(req.params.type, language);
+  const template = await getOrSeedWhatsappTemplate(req.params.type);
   res.json({ success: true, data: template });
 });
 
-// @desc  Update a template's body/active state for a given language.
-// @route PUT /api/whatsapp-templates/:type?language=en|ta
+// @desc  Update a template's body/active state. Warns (does not block) on
+// unknown/misspelled placeholders so an admin can fix a typo before it goes
+// out to real members, without losing their draft.
+// @route PUT /api/whatsapp-templates/:type
 const updateTemplate = asyncHandler(async (req, res) => {
   if (!WhatsappTemplate.TEMPLATE_TYPES.includes(req.params.type)) {
     throw new ApiError(404, 'Unknown WhatsApp template type.');
   }
-  const language = resolveLanguage(req.query.language || req.body.language);
   const { body, isActive } = req.body;
-  const template = await getOrSeedWhatsappTemplate(req.params.type, language);
+  const template = await getOrSeedWhatsappTemplate(req.params.type);
 
   if (body !== undefined) {
     if (!body.trim()) throw new ApiError(400, 'Message body cannot be empty.');
@@ -80,20 +60,19 @@ const updateTemplate = asyncHandler(async (req, res) => {
     action: 'update',
     module: 'settings',
     targetId: template._id,
-    description: `Updated WhatsApp template "${template.name}" (${WhatsappTemplate.LANGUAGE_LABELS[language]})`,
+    description: `Updated WhatsApp template "${template.name}"`,
   });
 
   res.json({ success: true, data: template, unknownPlaceholders: findUnknownPlaceholders(template.body) });
 });
 
-// @desc  Reset a template back to its default content for a given language
-// @route POST /api/whatsapp-templates/:type/reset?language=en|ta
+// @desc  Reset a template back to its default content
+// @route POST /api/whatsapp-templates/:type/reset
 const resetTemplate = asyncHandler(async (req, res) => {
-  const language = resolveLanguage(req.query.language || req.body.language);
-  const defaults = DEFAULTS_BY_LANGUAGE[language]?.[req.params.type];
+  const defaults = DEFAULT_TEMPLATES[req.params.type];
   if (!defaults) throw new ApiError(404, 'Unknown WhatsApp template type.');
 
-  const template = await getOrSeedWhatsappTemplate(req.params.type, language);
+  const template = await getOrSeedWhatsappTemplate(req.params.type);
   template.body = defaults.body;
   template.isActive = true;
   template.updatedBy = req.user._id;
@@ -103,25 +82,28 @@ const resetTemplate = asyncHandler(async (req, res) => {
     action: 'update',
     module: 'settings',
     targetId: template._id,
-    description: `Reset WhatsApp template "${template.name}" (${WhatsappTemplate.LANGUAGE_LABELS[language]}) to default`,
+    description: `Reset WhatsApp template "${template.name}" to default`,
   });
 
   res.json({ success: true, data: template });
 });
 
-// @desc  Render a preview with SAMPLE placeholder data for a given language.
-// @route POST /api/whatsapp-templates/:type/preview?language=en|ta
+// @desc  Render a preview with SAMPLE placeholder data — never touches a
+// real member. Financial placeholders use sample values regardless of the
+// caller's permission, since no real figures are involved (mirrors
+// emailTemplateController.previewTemplate's same choice). Accepts an
+// optional `body` override so the Settings UI can preview unsaved edits.
+// @route POST /api/whatsapp-templates/:type/preview
 const previewTemplate = asyncHandler(async (req, res) => {
   if (!WhatsappTemplate.TEMPLATE_TYPES.includes(req.params.type)) {
     throw new ApiError(404, 'Unknown WhatsApp template type.');
   }
-  const language = resolveLanguage(req.query.language || req.body.language);
-  const template = await getOrSeedWhatsappTemplate(req.params.type, language);
+  const template = await getOrSeedWhatsappTemplate(req.params.type);
   const settings = await Settings.getSingleton();
 
   const bodyToRender = req.body.body ?? template.body;
   const sampleData = {
-    memberName: language === 'ta' ? 'ராஜ் குமார்' : 'John Doe',
+    memberName: 'John Doe',
     membershipPlan: 'Gold Plan',
     startDate: new Date().toLocaleDateString('en-IN'),
     expiryDate: new Date().toLocaleDateString('en-IN'),
@@ -138,15 +120,16 @@ const previewTemplate = asyncHandler(async (req, res) => {
 });
 
 // @desc  Generate a personalized, ready-to-copy WhatsApp message for a real
-// member, in the requested language.
+// member — the core of the manual-only WhatsApp workflow. Never sends
+// anything; only fills in the template and normalizes the phone number for
+// an optional "Open WhatsApp" deep link on the frontend.
 // @route POST /api/whatsapp-templates/:type/generate
-// body: { memberId, membershipId?, paymentId?, language? }
+// body: { memberId, membershipId?, paymentId? }
 const generateMessage = asyncHandler(async (req, res) => {
   if (!WhatsappTemplate.TEMPLATE_TYPES.includes(req.params.type)) {
     throw new ApiError(404, 'Unknown WhatsApp template type.');
   }
   const { memberId, membershipId, paymentId } = req.body;
-  const language = resolveLanguage(req.body.language);
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
   const member = await Member.findById(memberId);
@@ -172,7 +155,7 @@ const generateMessage = asyncHandler(async (req, res) => {
   let payment = null;
   if (paymentId) payment = await Payment.findById(paymentId);
 
-  const template = await getOrSeedWhatsappTemplate(req.params.type, language);
+  const template = await getOrSeedWhatsappTemplate(req.params.type);
   const { data, warnings } = await buildWhatsappPlaceholderData({ member, membership, payment, daysRemaining, canViewFinance });
 
   const message = renderTemplate(template.body, data);
@@ -183,14 +166,13 @@ const generateMessage = asyncHandler(async (req, res) => {
     action: 'create',
     module: 'notifications',
     targetId: member._id,
-    description: `Generated a WhatsApp message (${template.name}, ${WhatsappTemplate.LANGUAGE_LABELS[language]}) for ${member.memberId} — not sent, manual copy/paste only`,
+    description: `Generated a WhatsApp message (${template.name}) for ${member.memberId} — not sent, manual copy/paste only`,
   });
 
   res.json({
     success: true,
     data: {
       message,
-      language,
       member: { _id: member._id, memberId: member.memberId, name: data.memberName, phone: member.phone },
       phone: {
         raw: member.phone,
@@ -205,8 +187,11 @@ const generateMessage = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc  OPTIONAL, best-effort activity log. Never records "sent".
+// @desc  OPTIONAL, best-effort activity log. Never records "sent" — see
+// models/WhatsappLog.js. A failure here must never block the actual
+// generate/copy/open action the frontend already performed.
 // @route POST /api/whatsapp-logs
+// body: { memberId, templateType, action: 'generated'|'copied'|'opened' }
 const logActivity = asyncHandler(async (req, res) => {
   const { memberId, templateType, action } = req.body;
   if (!memberId || !templateType || !['generated', 'copied', 'opened'].includes(action)) {

@@ -1,26 +1,25 @@
 const WhatsappTemplate = require('../models/WhatsappTemplate');
 const Settings = require('../models/Settings');
 const { renderTemplate } = require('./emailService'); // REUSED — never re-implemented
-const { DEFAULT_TEMPLATES, TAMIL_TEMPLATES } = require('./whatsappTemplatesDefault');
+const { DEFAULT_TEMPLATES } = require('./whatsappTemplatesDefault');
 const { normalizePhoneForWhatsapp, PHONE_INVALID_REASONS } = require('./phoneNormalizer');
 
-// NEW — resolves which default-content set to seed from, per language.
-const DEFAULTS_BY_LANGUAGE = { en: DEFAULT_TEMPLATES, ta: TAMIL_TEMPLATES };
-
-// Lazily seeds a (type, language) template pair with its default content
-// the first time it's requested. `language` defaults to 'en' so every
-// existing caller (from before multi-language support) keeps working
-// unchanged.
-const getOrSeedWhatsappTemplate = async (type, language = 'en') => {
-  let template = await WhatsappTemplate.findOne({ type, language });
+// Lazily seeds a template with its default content the first time it's
+// requested — identical rationale to emailService.getOrSeedTemplate.
+const getOrSeedWhatsappTemplate = async (type) => {
+  let template = await WhatsappTemplate.findOne({ type });
   if (!template) {
-    const defaults = DEFAULTS_BY_LANGUAGE[language]?.[type];
-    if (!defaults) throw new Error(`No default content defined for WhatsApp template type "${type}" in language "${language}".`);
-    template = await WhatsappTemplate.create({ type, language, ...defaults });
+    const defaults = DEFAULT_TEMPLATES[type];
+    if (!defaults) throw new Error(`No default content defined for WhatsApp template type "${type}".`);
+    template = await WhatsappTemplate.create({ type, ...defaults });
   }
   return template;
 };
 
+// Finds every {{token}} in a template body and reports which ones aren't in
+// the supported list — catches typos like {{memberNmae}} at save/preview
+// time instead of silently leaving literal "{{memberNmae}}" text in every
+// message generated from it.
 const findUnknownPlaceholders = (body) => {
   const found = new Set();
   const regex = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
@@ -31,6 +30,19 @@ const findUnknownPlaceholders = (body) => {
   return [...found].filter((token) => !WhatsappTemplate.SUPPORTED_PLACEHOLDERS.includes(token));
 };
 
+/**
+ * Builds the placeholder data set for a real member/membership/payment, and
+ * a parallel `warnings` list explaining any placeholder that couldn't be
+ * filled — either because the source data doesn't carry it, or (for
+ * amount/dueAmount) because the caller lacks finance permission.
+ *
+ * FIX (financial-data exposure): financial figures are simply never added
+ * to the returned data object when `canViewFinance` is false — renderTemplate()
+ * (reused from utils/emailService.js) leaves any placeholder it can't
+ * resolve as literal `{{token}}` text rather than substituting a value, so
+ * a restricted user's generated message can never carry a real amount, even
+ * indirectly.
+ */
 const buildWhatsappPlaceholderData = async ({ member, membership, payment, daysRemaining, canViewFinance } = {}) => {
   const settings = await Settings.getSingleton();
   const warnings = [];
@@ -87,7 +99,7 @@ module.exports = {
   getOrSeedWhatsappTemplate,
   findUnknownPlaceholders,
   buildWhatsappPlaceholderData,
-  renderTemplate,
+  renderTemplate, // re-exported so controllers only need to import from this one module
   normalizePhoneForWhatsapp,
   PHONE_INVALID_REASONS,
 };
