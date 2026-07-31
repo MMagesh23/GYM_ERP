@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Search, Download, Upload, Pencil, Trash2, Ban, RotateCcw,
-  Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard,
+  Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard, MessageCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
@@ -19,6 +19,7 @@ import PageHeader from '../../components/common/PageHeader';
 import { SkeletonTable } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
 import RecordPaymentModal from '../Payments/RecordPaymentModal';
+import WhatsAppCommunicationModal from '../../components/common/WhatsAppCommunicationModal';
 import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency } from '../../utils/memberHelpers';
 
 const STATUS_OPTIONS = ['active', 'expired', 'suspended', 'freeze', 'cancelled'];
@@ -52,8 +53,6 @@ const MembersPage = () => {
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const [searchParams, setSearchParams] = useSearchParams();
-  // NEW — read from the URL so Dashboard's "View All" (?expiring=7) lands
-  // here with the filter already applied.
   const expiringDays = searchParams.get('expiring');
 
   const [members, setMembers] = useState([]);
@@ -69,6 +68,7 @@ const MembersPage = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [importing, setImporting] = useState(false);
   const [collectPaymentFor, setCollectPaymentFor] = useState(null);
+  const [whatsappTarget, setWhatsappTarget] = useState(null);
 
   const fetchMembers = useCallback(
     async (page = 1) => {
@@ -123,11 +123,6 @@ const MembersPage = () => {
     }
   };
 
-  // FIX: members are now hard-deleted (see backend memberController.deleteMember).
-  // Deleting also cascade-removes the member's Membership record(s), which is
-  // why the member list, dashboard stats, and outstanding-dues figures need a
-  // refresh right after — a stale membership pointing at a gone member would
-  // otherwise keep inflating those counts until the next full page reload.
   const handleDelete = async () => {
     try {
       await memberApi.remove(deleteTarget._id);
@@ -253,8 +248,6 @@ const MembersPage = () => {
         ))}
       </div>
 
-      {/* NEW — banner shown when landing here via Dashboard's "View All"
-          (?expiring=N), so it's obvious a filter is applied and easy to clear. */}
       {expiringDays && (
         <div className="mb-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <span>
@@ -382,6 +375,14 @@ const MembersPage = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        <button
+                          title="WhatsApp message"
+                          aria-label="WhatsApp message"
+                          onClick={() => setWhatsappTarget(m)}
+                          className="rounded-lg p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/40"
+                        >
+                          <MessageCircle size={16} />
+                        </button>
                         {m.currentMembership?.billing?.outstanding > 0 && (
                           <button
                             title={`Collect ${formatCurrency(m.currentMembership.billing.outstanding)}`}
@@ -404,21 +405,6 @@ const MembersPage = () => {
                           <Pencil size={16} />
                         </button>
 
-                        {/*
-                          FIX: the old "Freeze" quick-action here called
-                          memberApi.changeStatus(id, 'freeze'), which only flips
-                          Member.status and does NOT touch the Membership record
-                          (endDate, freezeHistory, plan freeze-day allowance).
-                          Meanwhile the Member Profile page's "Freeze" button
-                          calls membershipApi.freeze(), which correctly extends
-                          the membership end date. Having both meant a receptionist
-                          using this quick action believed billing/expiry dates had
-                          moved when they hadn't — a real billing-correctness bug.
-                          Freezing now only happens through the membership-aware
-                          flow on the profile page; if a membership is currently
-                          frozen we link there instead of offering a second,
-                          inconsistent path to "unfreeze".
-                        */}
                         {m.status === 'freeze' || m.currentMembership?.status === 'frozen' ? (
                           <Link
                             to={`/members/${m._id}`}
@@ -507,6 +493,16 @@ const MembersPage = () => {
           collectPaymentFor?.currentMembership?.billing?.outstanding > 0
             ? `${formatCurrency(collectPaymentFor.currentMembership.billing.outstanding)} is still outstanding on this member's current membership.`
             : null
+        }
+      />
+
+      <WhatsAppCommunicationModal
+        open={Boolean(whatsappTarget)}
+        onClose={() => setWhatsappTarget(null)}
+        member={whatsappTarget}
+        membership={whatsappTarget?.currentMembership}
+        defaultTemplateType={
+          whatsappTarget?.currentMembership?.billing?.outstanding > 0 ? 'payment_due_reminder' : 'membership_expiry_reminder'
         }
       />
     </div>

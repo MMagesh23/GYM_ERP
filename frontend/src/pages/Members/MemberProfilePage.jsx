@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, RefreshCw, Snowflake, XCircle, Pencil, Phone, Mail, MapPin, Cake,
   Ruler, Weight, Briefcase, HeartPulse, StickyNote, ArrowRightLeft, Repeat,
-  FileText, CreditCard, CalendarClock, ShieldCheck, PlayCircle,
+  FileText, CreditCard, CalendarClock, ShieldCheck, PlayCircle,MessageCircle ,
 } from 'lucide-react';
 import { memberApi } from '../../services/memberApi';
 import { membershipApi } from '../../services/membershipApi';
@@ -15,12 +15,14 @@ import ProgressBar from '../../components/common/ProgressBar';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import EmptyState from '../../components/common/EmptyState';
 import { SkeletonBlock } from '../../components/common/Skeleton';
+import WhatsAppCommunicationModal from '../../components/common/WhatsAppCommunicationModal';
 import AssignMembershipModal from './AssignMembershipModal';
 import ChangePlanModal from './ChangePlanModal';
 import TransferMembershipModal from './TransferMembershipModal';
 import FreezeMembershipModal from './FreezeMembershipModal';
 import MemberFormModal from './MemberFormModal';
 import RecordPaymentModal from '../Payments/RecordPaymentModal';
+
 import {
   daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency, formatDate, billingStatusMeta,
 } from '../../utils/memberHelpers';
@@ -168,6 +170,7 @@ const MemberProfilePage = () => {
 
   const [editOpen, setEditOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [changePlanTarget, setChangePlanTarget] = useState(null);
   const [transferTarget, setTransferTarget] = useState(null);
   const [freezeTarget, setFreezeTarget] = useState(null);
@@ -331,9 +334,12 @@ const MemberProfilePage = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2 pb-1">
             {member.phone && (
-              <a href={`tel:${member.phone}`} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-                <Phone size={14} /> Call
-              </a>
+              <button
+                onClick={() => setWhatsappOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 dark:border-gray-700 dark:hover:bg-green-950/40"
+              >
+                <MessageCircle size={14} /> WhatsApp
+              </button>
             )}
             {member.email && (
               <a href={`mailto:${member.email}`} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
@@ -554,6 +560,15 @@ const MemberProfilePage = () => {
       {/* Modals */}
       <MemberFormModal open={editOpen} member={member} onClose={() => setEditOpen(false)} onSaved={load} />
       <AssignMembershipModal open={assignOpen} onClose={() => setAssignOpen(false)} onSaved={handleAssignSaved} memberId={id} />
+      <WhatsAppCommunicationModal
+          open={whatsappOpen}
+          onClose={() => setWhatsappOpen(false)}
+          member={member}
+          membership={activeMembership}
+          defaultTemplateType={
+            activeMembership?.billing?.outstanding > 0 ? 'payment_due_reminder' : 'membership_expiry_reminder'
+          }
+        />
       <ChangePlanModal open={Boolean(changePlanTarget)} membership={changePlanTarget} onClose={() => setChangePlanTarget(null)} onSaved={handleChangePlanSaved} />
       <TransferMembershipModal
         open={Boolean(transferTarget)}

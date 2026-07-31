@@ -13,7 +13,11 @@ const MODULES = [
   'reports',
   'settings',
   'auditLogs',
-  'finance', // NEW: finance dashboard + daily cash closing
+  'finance',
+  // NEW — WhatsApp communication. 'view' covers generating/copying/opening
+  // messages; 'update' covers managing template content (see
+  // routes/whatsappTemplateRoutes.js and utils/seed.js for the default grant).
+  'whatsapp',
 ];
 
 const permissionSchema = new mongoose.Schema(

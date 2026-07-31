@@ -15,7 +15,9 @@ module.exports = {
   Notification: require('./Notification'),
   AuditLog: require('./AuditLog'),
   CashClosing: require('./CashClosing'),
-  EmailSettings: require('./EmailSettings'), // NEW - Email Configuration module
-  EmailTemplate: require('./EmailTemplate'), // NEW
-  EmailLog: require('./EmailLog'), // NEW
+  EmailSettings: require('./EmailSettings'),
+  EmailTemplate: require('./EmailTemplate'),
+  EmailLog: require('./EmailLog'),
+  WhatsappTemplate: require('./WhatsappTemplate'), // NEW
+  WhatsappLog: require('./WhatsappLog'), // NEW
 };

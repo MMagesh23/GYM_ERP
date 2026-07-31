@@ -8,12 +8,11 @@ const authorize = (...allowedRoles) => (req, res, next) => {
 };
 
 const OPEN_BY_DEFAULT_MODULES = ['dashboard', 'members', 'memberships', 'payments', 'equipment', 'notifications'];
-const OPEN_BY_DEFAULT_ACTIONS = ['view', 'create', 'update']; // matches seed.js default Receptionist role; delete/export excluded
+const OPEN_BY_DEFAULT_ACTIONS = ['view', 'create', 'update'];
 
-// NEW — the same module/action check `can()` does, extracted into a plain
-// boolean-returning function so controllers can ask "does this user have
-// permission X" inline (e.g. to decide whether to include finance data in a
-// response body) without needing a full middleware/next() chain.
+// Boolean-returning permission check, reused by can() and by controllers
+// that need to ask "does this user have permission X" inline (e.g. to
+// decide whether to include finance data in a response body).
 const hasPermission = async (user, moduleName, action) => {
   if (!user) return false;
   if (user.role === 'admin') return true;

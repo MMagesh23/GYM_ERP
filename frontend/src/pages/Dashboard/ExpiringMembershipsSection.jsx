@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CalendarClock, Phone, ChevronRight } from 'lucide-react';
+import { AlertCircle, CalendarClock, Phone, ChevronRight, MessageCircle } from 'lucide-react';
 import { dashboardApi } from '../../services/dashboardApi';
 import Badge from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import { SkeletonBlock } from '../../components/common/Skeleton';
+import WhatsAppCommunicationModal from '../../components/common/WhatsAppCommunicationModal';
 import { formatCurrency, formatDate, expiryBadge } from '../../utils/memberHelpers';
 
 const DASHBOARD_PREVIEW_LIMIT = 5;
@@ -21,6 +22,7 @@ const ExpiringMembershipsSection = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [whatsappTarget, setWhatsappTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,12 +95,11 @@ const ExpiringMembershipsSection = () => {
           {rows.map((row) => {
             const badge = expiryBadge(row.daysRemaining);
             return (
-              <button
+              <div
                 key={row.membershipId}
-                onClick={() => navigate(`/members/${row.memberId}`)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-left transition hover:border-brand-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 transition hover:border-brand-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
               >
-                <div className="min-w-0 flex-1">
+                <button onClick={() => navigate(`/members/${row.memberId}`)} className="min-w-0 flex-1 text-left">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       {row.memberName}
@@ -114,20 +115,40 @@ const ExpiringMembershipsSection = () => {
                       </span>
                     )}
                   </p>
-                </div>
-                <div className="shrink-0 text-right">
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
                   {row.outstanding !== undefined && row.outstanding > 0 && (
                     <p className="text-xs font-medium text-red-600 dark:text-red-400">
                       {formatCurrency(row.outstanding)} due
                     </p>
                   )}
-                  <ChevronRight size={16} className="ml-auto mt-1 text-gray-300" />
+                  <button
+                    title="WhatsApp message"
+                    aria-label="WhatsApp message"
+                    onClick={() => setWhatsappTarget(row)}
+                    className="rounded-lg p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/40"
+                  >
+                    <MessageCircle size={16} />
+                  </button>
+                  <ChevronRight size={16} className="text-gray-300" />
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
+
+      <WhatsAppCommunicationModal
+        open={Boolean(whatsappTarget)}
+        onClose={() => setWhatsappTarget(null)}
+        member={
+          whatsappTarget
+            ? { _id: whatsappTarget.memberId, firstName: whatsappTarget.memberName, lastName: '', phone: whatsappTarget.memberPhone }
+            : null
+        }
+        membership={whatsappTarget ? { _id: whatsappTarget.membershipId } : null}
+        defaultTemplateType="membership_expiry_reminder"
+      />
     </div>
   );
 };

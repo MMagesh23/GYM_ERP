@@ -14,16 +14,17 @@ import RolesPanel from './RolesPanel';
 import OverviewPanel from './OverviewPanel';
 import DashboardWidgetsPanel from './DashboardWidgetsPanel';
 import EmailPanel from './EmailPanel';
+import WhatsappTemplatesPanel from './WhatsappTemplatesPanel';
 import { setSettings as setSettingsStore } from '../../redux/slices/settingsSlice';
 
 const TABS = [
   'Overview', 'General', 'Branding', 'Invoicing', 'Business Hours',
-  'Dashboard Widgets', 'Roles & Permissions', 'Email', 'Features', 'Security',
+  'Dashboard Widgets', 'Roles & Permissions', 'Email', 'WhatsApp', 'Features', 'Security',
 ];
 
 // Tabs that render their own self-contained panel (with its own save button)
 // instead of the shared form at the bottom of this page.
-const STANDALONE_TABS = ['Overview', 'Roles & Permissions', 'Business Hours', 'Dashboard Widgets', 'Email'];
+const STANDALONE_TABS = ['Overview', 'Roles & Permissions', 'Business Hours', 'Dashboard Widgets', 'Email', 'WhatsApp'];
 
 const SettingsPage = () => {
   const [tab, setTab] = useState('Overview');
@@ -104,6 +105,8 @@ const SettingsPage = () => {
 
       {tab === 'Email' && <EmailPanel />}
 
+      {tab === 'WhatsApp' && <WhatsappTemplatesPanel />}
+
       {!STANDALONE_TABS.includes(tab) && (
         <form onSubmit={handleSubmit(onSubmit)}>
           {tab === 'General' && (
@@ -120,6 +123,18 @@ const SettingsPage = () => {
               <div><label className={labelClass}>Member ID Prefix</label><input className={inputClass} {...register('memberIdPrefix')} /></div>
               <div><label className={labelClass}>Default Tax (%)</label><input type="number" step="0.01" className={inputClass} {...register('taxPercentage')} /></div>
               <div><label className={labelClass}>Default Grace Period (days)</label><input type="number" className={inputClass} {...register('defaultGracePeriodDays')} /></div>
+              <div>
+                <label className={labelClass}>WhatsApp Default Country</label>
+                <select className={inputClass} {...register('whatsappDefaultCountry')}>
+                  <option value="IN">India (+91)</option>
+                  <option value="US">United States (+1)</option>
+                  <option value="GB">United Kingdom (+44)</option>
+                  <option value="AE">UAE (+971)</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-400">
+                  Used only to build "Open WhatsApp" links for bare local phone numbers — never modifies stored numbers.
+                </p>
+              </div>
               <div><label className={labelClass}>Financial Year Start Month</label>
                 <select className={inputClass} {...register('financialYearStartMonth')}>
                   {Array.from({ length: 12 }, (_, i) => (

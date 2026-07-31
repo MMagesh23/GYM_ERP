@@ -54,6 +54,12 @@ const settingsSchema = new mongoose.Schema(
     lowStockThresholdDays: { type: Number, default: 7 }, // equipment warranty/service alert window
     sessionIdleTimeoutMinutes: { type: Number, default: 0 }, // 0 = disabled
 
+    // NEW — used only by utils/phoneNormalizer.js to decide which country's
+    // dialing code to prefix onto a bare local phone number when building a
+    // WhatsApp deep link. Never sent anywhere; purely a link-generation
+    // default. ISO-3166-ish short code, e.g. 'IN', 'US', 'GB', 'AE'.
+    whatsappDefaultCountry: { type: String, default: 'IN' },
+
     // Feature toggles
     features: {
       qrCode: { type: Boolean, default: true },

@@ -16,9 +16,11 @@ router.use('/notifications', require('./notificationRoutes'));
 router.use('/reports', require('./reportRoutes'));
 router.use('/audit-logs', require('./auditLogRoutes'));
 router.use('/roles', require('./roleRoutes'));
-router.use('/finance', require('./financeRoutes')); // NEW
-router.use('/email-settings', require('./emailSettingsRoutes')); // NEW - Email Configuration module
-router.use('/email-templates', require('./emailTemplateRoutes')); // NEW
-router.use('/email-logs', require('./emailLogRoutes')); // NEW
+router.use('/finance', require('./financeRoutes'));
+router.use('/email-settings', require('./emailSettingsRoutes'));
+router.use('/email-templates', require('./emailTemplateRoutes'));
+router.use('/email-logs', require('./emailLogRoutes'));
+router.use('/whatsapp-templates', require('./whatsappTemplateRoutes')); // NEW
+router.use('/whatsapp-logs', require('./whatsappLogRoutes')); // NEW
 
 module.exports = router;

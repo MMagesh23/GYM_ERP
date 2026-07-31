@@ -21,7 +21,7 @@ const run = async () => {
       isSystemRole: true,
       permissions: [
         // Standard modules: view/create/update, no delete/export
-        ...Role.MODULES.filter((m) => !['settings', 'auditLogs', 'finance'].includes(m)).map((m) => ({
+        ...Role.MODULES.filter((m) => !['settings', 'auditLogs', 'finance', 'whatsapp'].includes(m)).map((m) => ({
           module: m,
           actions: { view: true, create: true, update: true, delete: false, export: false },
         })),
@@ -31,6 +31,12 @@ const run = async () => {
         // Only admin (bypasses can() checks) or a custom role explicitly granted
         // finance.update can close a day.
         { module: 'finance', actions: { view: true, create: false, update: false, delete: false, export: false } },
+        // NEW — Receptionists can generate/copy/open WhatsApp messages by
+        // default (same everyday-operational spirit as members/payments),
+        // but cannot create/edit/reset templates — that stays admin-only
+        // unless a gym owner deliberately grants whatsapp.update to a
+        // custom role, same pattern as finance.update above.
+        { module: 'whatsapp', actions: { view: true, create: false, update: false, delete: false, export: false } },
       ],
     },
   ];
