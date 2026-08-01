@@ -195,6 +195,22 @@ const SettingsPage = () => {
               <div><label className={labelClass}>Number Padding</label><input type="number" className={inputClass} {...register('invoiceNumberPadding')} /></div>
               <div className="sm:col-span-2"><label className={labelClass}>Terms & Conditions</label><textarea rows={3} className={inputClass} {...register('invoiceTerms')} /></div>
               <div className="sm:col-span-2"><label className={labelClass}>Receipt Footer Message</label><input className={inputClass} {...register('receiptFooterMessage')} /></div>
+
+              {/* NEW — display-only bank/UPI details printed on the invoice
+                  PDF's "Payment Details" section (see backend/utils/generateInvoicePdf.js).
+                  Leave any field blank to omit the whole section from the PDF. */}
+              <div className="sm:col-span-2 mt-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+                <h3 className="mb-1 text-sm font-semibold">Bank / Payment Details</h3>
+                <p className="mb-3 text-xs text-gray-400">
+                  Shown on generated invoices so members know where to pay. This app doesn't process payments —
+                  it's for display only.
+                </p>
+              </div>
+              <div><label className={labelClass}>Account Holder Name</label><input className={inputClass} {...register('bankDetails.accountHolderName')} /></div>
+              <div><label className={labelClass}>Bank Name</label><input className={inputClass} {...register('bankDetails.bankName')} /></div>
+              <div><label className={labelClass}>Account Number</label><input className={inputClass} {...register('bankDetails.accountNumber')} /></div>
+              <div><label className={labelClass}>IFSC Code</label><input className={inputClass} {...register('bankDetails.ifscCode')} /></div>
+              <div><label className={labelClass}>UPI ID</label><input className={inputClass} placeholder="yourgym@upi" {...register('bankDetails.upiId')} /></div>
             </div>
           )}
 

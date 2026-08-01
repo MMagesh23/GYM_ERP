@@ -325,7 +325,9 @@ const downloadInvoice = asyncHandler(async (req, res) => {
         email: '',
       };
 
-  streamInvoicePdf(res, {
+  // NEW — streamInvoicePdf is now async (generates a small verification QR
+  // code before drawing), so this is awaited rather than fire-and-forget.
+  await streamInvoicePdf(res, {
     invoiceNumber: invoice.invoiceNumber,
     issuedDate: invoice.issuedDate,
     gym: {
@@ -334,6 +336,12 @@ const downloadInvoice = asyncHandler(async (req, res) => {
       contact: settings.contactNumber,
       email: settings.email,
       gst: settings.gstNumber,
+      // NEW — professional-invoice fields, previously collected in Settings
+      // but never actually rendered on the PDF.
+      pan: settings.panNumber,
+      website: settings.website,
+      bankDetails: settings.bankDetails,
+      terms: settings.invoiceTerms,
       footer: settings.receiptFooterMessage,
       currency: settings.currencySymbol,
       accentColor: settings.invoiceAccentColor,

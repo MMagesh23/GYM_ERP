@@ -39,13 +39,23 @@ const settingsSchema = new mongoose.Schema(
       },
     ],
 
-    // Invoice / receipt customization
     invoicePrefix: { type: String, default: 'INV' },
     invoiceNumberPadding: { type: Number, default: 5 },
     invoiceTerms: { type: String, default: '' },
     receiptFooterMessage: { type: String, default: 'Thank you for choosing us!' },
     invoiceAccentColor: { type: String, default: '#3390fa' },
 
+    // NEW — optional bank/UPI payment details, printed on the invoice PDF's
+    // "Payment Details" block when set (see utils/generateInvoicePdf.js).
+    // Never used for any payment processing — display-only, since this app
+    // has no payment-gateway integration.
+    bankDetails: {
+      accountHolderName: { type: String, default: '' },
+      bankName: { type: String, default: '' },
+      accountNumber: { type: String, default: '' },
+      ifscCode: { type: String, default: '' },
+      upiId: { type: String, default: '' },
+    },
     // System / ERP configuration
     memberIdPrefix: { type: String, default: 'GYM' },
     financialYearStartMonth: { type: Number, default: 4 },
