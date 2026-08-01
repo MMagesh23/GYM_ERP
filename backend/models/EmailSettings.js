@@ -34,6 +34,15 @@ emailSettingsSchema.virtual('hasAppPassword').get(function () {
   return Boolean(this.appPasswordEncrypted);
 });
 
+// NEW — distinguishes "ciphertext exists but can no longer be decrypted"
+// (ENCRYPTION_KEY changed since it was saved — the classic "works locally,
+// broken after deploy" cause) from "never configured". hasAppPassword alone
+// can't tell these apart, which made this failure mode invisible in the UI —
+// it looked identical to "nothing was ever set up."
+emailSettingsSchema.virtual('appPasswordUndecryptable').get(function () {
+  return Boolean(this.appPasswordEncrypted) && !this.getAppPassword();
+});
+
 emailSettingsSchema.methods.setAppPassword = function (plainPassword) {
   this.appPasswordEncrypted = plainPassword ? encrypt(plainPassword) : '';
 };

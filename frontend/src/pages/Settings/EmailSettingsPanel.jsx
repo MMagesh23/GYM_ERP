@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Save, Wifi, WifiOff, Loader2, Send, ShieldCheck } from 'lucide-react';
+import { Save, Wifi, WifiOff, Loader2, Send, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { emailSettingsApi } from '../../services/emailApi';
 
 const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800';
@@ -104,13 +104,31 @@ const EmailSettingsPanel = () => {
 
   return (
     <div className="space-y-8">
+      {/* NEW — surfaces the "ciphertext exists but can't be decrypted" case,
+          which previously looked identical to "nothing was ever configured."
+          This is almost always caused by ENCRYPTION_KEY differing between
+          environments (e.g. after a deploy) — see utils/encryption.js. */}
+      {settings.appPasswordUndecryptable && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Stored Gmail App Password can't be read back.</p>
+            <p className="mt-0.5 text-xs text-amber-700/90 dark:text-amber-400/90">
+              This usually means the server's encryption key changed since it was saved (for example, after a
+              redeploy). Email sending is currently failing silently as a result. Re-enter the App Password below and
+              save to fix this.
+            </p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold">Gmail SMTP configuration</h3>
             <p className="mt-0.5 text-xs text-gray-400">
               Use a Gmail App Password, not your regular Gmail password. Generate one at{' '}
-              <a
+              
                 href="https://myaccount.google.com/apppasswords"
                 target="_blank"
                 rel="noreferrer"
@@ -132,14 +150,21 @@ const EmailSettingsPanel = () => {
           <div>
             <label className={labelClass}>
               App Password{' '}
-              {settings.hasAppPassword && (
+              {settings.hasAppPassword && !settings.appPasswordUndecryptable && (
                 <span className="text-xs font-normal text-gray-400">(already set — leave blank to keep it)</span>
+              )}
+              {settings.appPasswordUndecryptable && (
+                <span className="text-xs font-normal text-amber-600 dark:text-amber-400">(needs to be re-entered)</span>
               )}
             </label>
             <input
               type="password"
-              placeholder={settings.hasAppPassword ? '••••••••••••••••' : '16-character app password'}
-              className={inputClass}
+              placeholder={
+                settings.hasAppPassword && !settings.appPasswordUndecryptable
+                  ? '••••••••••••••••'
+                  : '16-character app password'
+              }
+              className={`${inputClass} ${settings.appPasswordUndecryptable ? 'input-error border-amber-400 focus:border-amber-500 focus:ring-amber-500' : ''}`}
               {...register('appPassword')}
             />
           </div>

@@ -42,10 +42,16 @@ const listEmailLogs = asyncHandler(async (req, res) => {
 // If subject/message are provided they render into the announcement template's
 // placeholders (as the free-text portion); otherwise the template's own default
 // wording is used as-is for every recipient.
+//
+// FIX: members are now hard-deleted (see memberController.deleteMember) — there
+// is no `isDeleted` field on the Member schema anymore. The previous query
+// filtered on `isDeleted: false`, which is a strict equality match against a
+// field that no longer exists on ANY document, so it never matched anything
+// and this endpoint silently sent to zero of the selected members every time.
 const sendAnnouncement = asyncHandler(async (req, res) => {
   const { memberIds = [], emails = [], subject, message } = req.body;
 
-  const members = memberIds.length ? await Member.find({ _id: { $in: memberIds }, isDeleted: false }) : [];
+  const members = memberIds.length ? await Member.find({ _id: { $in: memberIds } }) : [];
   const memberRecipients = members
     .filter((m) => m.email)
     .map((m) => ({ email: m.email, memberName: `${m.firstName} ${m.lastName || ''}`.trim(), member: m._id }));

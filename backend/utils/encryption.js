@@ -10,6 +10,13 @@ const crypto = require('crypto');
 // but a dedicated ENCRYPTION_KEY is strongly recommended in production since
 // rotating JWT_ACCESS_SECRET would otherwise also break decryption of stored
 // credentials.
+//
+// CRITICAL DEPLOYMENT NOTE: if ENCRYPTION_KEY is left unset, the derived key
+// depends on JWT_ACCESS_SECRET. If that secret differs between environments
+// (e.g. a fresh value auto-generated per deploy on your host), anything
+// encrypted in one environment becomes silently undecryptable in another —
+// see the loud console.error below and EmailSettings.appPasswordUndecryptable
+// for how this surfaces instead of failing invisibly.
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // recommended for GCM
 
@@ -52,8 +59,20 @@ const decrypt = (payload) => {
     const decrypted = Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]);
     return decrypted.toString('utf8');
   } catch (err) {
-    // Wrong key (e.g. ENCRYPTION_KEY rotated) or corrupted value — never throw
-    // into a request path over this; callers treat '' as "not configured".
+    // FIX: previously failed completely silently, which made a stale/mismatched
+    // ENCRYPTION_KEY (the #1 cause of "email works locally, not in production")
+    // indistinguishable from "nothing was ever configured." Ciphertext exists
+    // but couldn't be decrypted with the CURRENT key — almost always means
+    // ENCRYPTION_KEY (or the JWT_ACCESS_SECRET fallback) changed since this
+        // value was saved. Never throw into a request path over this, but log
+    // loudly so it's diagnosable, and see EmailSettings.appPasswordUndecryptable
+    // for how this is surfaced to the admin in the UI.
+    console.error(
+      '[encryption] Failed to decrypt a stored secret — ENCRYPTION_KEY (or the ' +
+        'JWT_ACCESS_SECRET fallback it derives from) most likely changed since this ' +
+        'value was encrypted. Re-enter the affected credential (e.g. the Gmail App ' +
+        'Password in Settings > Email) to fix this.'
+    );
     return '';
   }
 };
