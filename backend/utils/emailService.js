@@ -1,3 +1,4 @@
+// backend/utils/emailService.js
 const nodemailer = require('nodemailer');
 const EmailSettings = require('../models/EmailSettings');
 const EmailTemplate = require('../models/EmailTemplate');
@@ -9,6 +10,19 @@ const { DEFAULT_TEMPLATES } = require('./emailTemplatesDefault');
 // Built fresh from the current DB-stored config on every send rather than
 // cached at boot, since the Admin can change/enable credentials at runtime
 // from the Email Settings page and we want that to take effect immediately.
+//
+// FIX (production 502s): nodemailer had NO timeouts configured, so a network
+// that silently drops (rather than rejects) outbound SMTP traffic — common on
+// Render/Railway/most PaaS hosts, which often block ports 465/587 — caused
+// transporter.verify()/sendMail() to hang indefinitely. The request never
+// resolved, the platform's own proxy timeout fired first and returned a bare
+// 502 with no app-level headers at all (including CORS headers), which the
+// browser then misreports as a CORS failure. These timeouts make the app
+// itself fail fast with a clear, actionable JSON error instead.
+const SMTP_CONNECTION_TIMEOUT_MS = 10_000; // time to establish the TCP connection
+const SMTP_GREETING_TIMEOUT_MS = 10_000;   // time to wait for the SMTP greeting after connecting
+const SMTP_SOCKET_TIMEOUT_MS = 20_000;     // idle-socket timeout for the rest of the exchange
+
 const buildTransporter = (emailSettings) => {
   const user = emailSettings.gmailAddress;
   const pass = emailSettings.getAppPassword();
@@ -17,8 +31,26 @@ const buildTransporter = (emailSettings) => {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user, pass },
+    connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+    socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
   });
 };
+
+// Belt-and-suspenders: even with the transporter timeouts above, wrap the
+// call itself so a hang anywhere in the chain can never outlive this and
+// silently turn into a platform-level 502 again.
+const withTimeout = (promise, ms, timeoutMessage) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
+  ]);
+
+const OVERALL_TIMEOUT_MS = 25_000;
+const OVERALL_TIMEOUT_MESSAGE =
+  'Connection to the mail server timed out. Your hosting provider may be blocking outbound SMTP traffic ' +
+  '(ports 465/587) — this is common on some hosts. If this keeps happening, consider using an HTTP-based ' +
+  'email API (e.g. SendGrid, Mailgun, Resend, SES) instead of direct Gmail SMTP.';
 
 // @desc  Verify the current stored Gmail credentials work, without sending an email.
 // Used by both the "Connection Status" indicator and before a manual test send.
@@ -35,7 +67,7 @@ const verifyConnection = async () => {
   }
 
   try {
-    await transporter.verify();
+    await withTimeout(transporter.verify(), OVERALL_TIMEOUT_MS, OVERALL_TIMEOUT_MESSAGE);
     emailSettings.lastVerifyStatus = 'success';
     emailSettings.lastVerifyError = '';
     emailSettings.lastVerifiedAt = new Date();
@@ -131,13 +163,17 @@ const sendRawEmail = async ({ to, subject, html, templateType = '', relatedMembe
   const fromAddress = `"${emailSettings.senderName || 'Gym ERP'}" <${emailSettings.gmailAddress}>`;
 
   try {
-    await transporter.sendMail({
-      from: fromAddress,
-      to,
-      subject,
-      html,
-      ...(emailSettings.replyTo ? { replyTo: emailSettings.replyTo } : {}),
-    });
+    await withTimeout(
+      transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject,
+        html,
+        ...(emailSettings.replyTo ? { replyTo: emailSettings.replyTo } : {}),
+      }),
+      OVERALL_TIMEOUT_MS,
+      OVERALL_TIMEOUT_MESSAGE
+    );
 
     await EmailLog.create({
       recipient: to,
