@@ -29,7 +29,11 @@ router.post(
   [
     body('memberId').notEmpty().withMessage('Member is required'),
     body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
-    body('paymentMethod').isIn(['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'wallet']),
+    // FIX (C2): do NOT validate against a hardcoded enum here — the controller
+    // validates paymentMethod against Settings.paymentMethods (the DB-stored,
+    // admin-configurable list). A static isIn() at the route layer would silently
+    // block any custom payment method added in Settings without a code deploy.
+    body('paymentMethod').notEmpty().withMessage('Payment method is required'),
     // FIX: previously status was completely unvalidated at the route layer — a
     // direct API call could set status: 'refunded' at creation time, bypassing
     // the refund flow entirely. Creation is now restricted to states a payment can

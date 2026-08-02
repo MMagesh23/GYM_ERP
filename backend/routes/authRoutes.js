@@ -45,7 +45,13 @@ router.post(
 );
 
 router.post('/refresh', refresh);
-router.post('/logout', protect, logout);
+// FIX (H1): logout must not require a valid access token. After the 15-min
+// access token expires, a user sitting on the app cannot call this endpoint
+// with `protect` in place — the cookie is never cleared server-side and the
+// session is never revoked. authController.logout handles both cases: if the
+// refresh token in the cookie is present and valid it revokes the session; if
+// the cookie is absent or invalid it still clears the cookie and returns 200.
+router.post('/logout', logout);
 router.get('/me', protect, me);
 
 router.put(

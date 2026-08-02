@@ -128,7 +128,7 @@ const EmailSettingsPanel = () => {
             <h3 className="text-sm font-semibold">Gmail SMTP configuration</h3>
             <p className="mt-0.5 text-xs text-gray-400">
               Use a Gmail App Password, not your regular Gmail password. Generate one at{' '}
-              
+              <a
                 href="https://myaccount.google.com/apppasswords"
                 target="_blank"
                 rel="noreferrer"
