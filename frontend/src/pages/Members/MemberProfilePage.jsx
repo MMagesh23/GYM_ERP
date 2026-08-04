@@ -22,6 +22,7 @@ import TransferMembershipModal from './TransferMembershipModal';
 import FreezeMembershipModal from './FreezeMembershipModal';
 import MemberFormModal from './MemberFormModal';
 import RecordPaymentModal from '../Payments/RecordPaymentModal';
+import QuickAvatarUpload from '../../components/common/QuickAvatarUpload';
 
 import {
   daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurrency, formatDate, billingStatusMeta,
@@ -79,6 +80,11 @@ const MembershipTimelineCard = ({ record, onRenew, onFreeze, onUnfreeze, onChang
                 {meta.label}
                 {billing.status === 'partial' && ` — ${formatCurrency(billing.outstanding)} due`}
               </span>
+            )}
+            {billing.discountGiven > 0 && (
+              <div className="mt-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                Discount applied {formatCurrency(billing.discountGiven)}
+              </div>
             )}
           </div>
         </div>
@@ -172,6 +178,11 @@ const MemberProfilePage = () => {
   const [assignOpen, setAssignOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [changePlanTarget, setChangePlanTarget] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+
+  const handlePhotoUpdated = useCallback((updated) => {
+    setMember(updated);
+  }, []);
   const [transferTarget, setTransferTarget] = useState(null);
   const [freezeTarget, setFreezeTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -321,7 +332,7 @@ const MemberProfilePage = () => {
         <div className="h-16 bg-gradient-to-r from-brand-500 to-brand-700" />
         <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-5">
           <div className="-mt-8 flex items-end gap-4">
-            <Avatar firstName={member.firstName} lastName={member.lastName} photo={member.photo} size="xl" ring />
+            <QuickAvatarUpload member={member} size="xl" onUpdated={handlePhotoUpdated} />
             <div className="pb-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold">
@@ -529,6 +540,16 @@ const MemberProfilePage = () => {
                       <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
                       <td className="px-4 py-3">
                         {formatCurrency(p.finalAmount)}
+                        {p.discount > 0 && (
+                          <div className="mt-1 text-xs text-green-600 dark:text-green-300">
+                            Discount {formatCurrency(p.discount)}
+                          </div>
+                        )}
+                        {p.tax > 0 && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            Tax {formatCurrency(p.tax)}
+                          </div>
+                        )}
                         {p.status === 'partial' && outstanding > 0 && (
                           <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">({formatCurrency(outstanding)} due)</span>
                         )}

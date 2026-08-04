@@ -247,9 +247,16 @@ const PaymentsPage = () => {
                     </td>
                     <td className="px-4 py-3">
                       {formatCurrency(p.finalAmount)}
-                      {/* FIX: previously showed nothing to distinguish a partial payment's
-                          collected amount from a fully-paid invoice — now shows the real
-                          outstanding balance, computed off amountPaid. */}
+                      {p.discount > 0 && (
+                        <div className="mt-1 text-xs text-green-600 dark:text-green-300">
+                          Discount {formatCurrency(p.discount)}
+                        </div>
+                      )}
+                      {p.tax > 0 && (
+                        <div className="mt-1 text-xs text-gray-500">
+                          Tax {formatCurrency(p.tax)}
+                        </div>
+                      )}
                       {p.status === 'partial' && outstanding > 0 && (
                         <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">({formatCurrency(outstanding)} due)</span>
                       )}
