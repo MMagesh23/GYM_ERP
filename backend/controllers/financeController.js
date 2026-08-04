@@ -105,9 +105,14 @@ const financeSummary = asyncHandler(async (req, res) => {
                 input: { $filter: { input: '$pmts', cond: { $ne: ['$$this.status', 'failed'] } } },
                 as: 'p',
                 in: {
-                  $max: [
-                    { $subtract: [{ $ifNull: ['$$p.amountPaid', '$$p.finalAmount'] }, { $ifNull: ['$$p.refund.refundedAmount', 0] }] },
-                    0,
+                  $add: [
+                    {
+                      $max: [
+                        { $subtract: [{ $ifNull: ['$$p.amountPaid', '$$p.finalAmount'] }, { $ifNull: ['$$p.refund.refundedAmount', 0] }] },
+                        0,
+                      ],
+                    },
+                    { $ifNull: ['$$p.discount', 0] },
                   ],
                 },
               },

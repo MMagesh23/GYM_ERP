@@ -53,6 +53,17 @@ const createPayment = asyncHandler(async (req, res) => {
 
   await validatePaymentMethod(paymentMethod);
 
+  const discountValue = Number(discount) || 0;
+  if (discountValue < 0) {
+    throw new ApiError(400, 'Discount cannot be negative.');
+  }
+  if (discountValue > Number(amount)) {
+    throw new ApiError(
+      400,
+      `Discount (${discountValue.toFixed(2)}) cannot exceed the amount (${Number(amount).toFixed(2)}).`
+    );
+  }
+
   // FIX (P1): a payment recorded today always affects TODAY's cash position
   // (paymentDate defaults to now), so guard against today being an
   // already-closed day. Non-admins are blocked outright; an admin override
@@ -72,7 +83,7 @@ const createPayment = asyncHandler(async (req, res) => {
     }
   }
 
-  const finalAmount = Math.round((Number(amount) - Number(discount) + Number(tax)) * 100) / 100;
+  const finalAmount = Math.round((Number(amount) - discountValue + Number(tax)) * 100) / 100;
   const resolvedStatus = status || 'paid';
 
   let resolvedAmountPaid;
@@ -104,7 +115,7 @@ const createPayment = asyncHandler(async (req, res) => {
   // case (two near-simultaneous submissions racing each other).
   if (membership) {
     const existingPayments = await Payment.find({ membership: membership._id })
-      .select('finalAmount amountPaid status refund.refundedAmount')
+      .select('finalAmount amountPaid discount status refund.refundedAmount')
       .lean();
     const billing = summarizeMembershipBilling(membership.finalAmount, existingPayments);
 
@@ -116,13 +127,14 @@ const createPayment = asyncHandler(async (req, res) => {
       );
     }
 
-    const amountBeingCollected =
+    const cashCollectedNow =
       resolvedStatus === 'paid' ? finalAmount : resolvedStatus === 'partial' ? resolvedAmountPaid : 0;
+    const amountBeingSettled = resolvedStatus === 'failed' ? 0 : cashCollectedNow + discountValue;
 
-    if (amountBeingCollected > billing.outstanding + 0.01) {
+    if (amountBeingSettled > billing.outstanding + 0.01) {
       throw new ApiError(
         400,
-        `Amount collected (${amountBeingCollected.toFixed(2)}) exceeds the outstanding balance of ` +
+        `Amount collected plus discount (${amountBeingSettled.toFixed(2)}) exceeds the outstanding balance of ` +
           `${billing.outstanding.toFixed(2)} for this membership. Collect up to the outstanding amount only.`
       );
     }
@@ -157,7 +169,7 @@ const createPayment = asyncHandler(async (req, res) => {
       member: member._id,
       membership: membership?._id,
       amount: Number(amount),
-      discount: Number(discount),
+      discount: discountValue,
       tax: Number(tax),
       finalAmount,
       amountPaid: resolvedAmountPaid,
@@ -192,26 +204,15 @@ const createPayment = asyncHandler(async (req, res) => {
       },
     ],
     subTotal: Number(amount),
-    discount: Number(discount),
+    discount: discountValue,
     tax: Number(tax),
     grandTotal: finalAmount,
-    issuedBy: req.user._id,
-  });
-
-  payment.invoice = invoice._id;
-  await payment.save();
-
-  if (membership) {
-    membership.invoice = invoice._id;
-    await membership.save();
-  }
-
-  await logAudit(req, {
     action: 'payment',
     module: 'payments',
     targetId: payment._id,
     description:
       `Recorded payment ${invoiceNumber} for member ${member.memberId} (${finalAmount})` +
+      (discountValue > 0 ? ` with a discount of ${discountValue.toFixed(2)}` : '') +
       (resolvedStatus === 'partial'
         ? ` — ${resolvedAmountPaid} collected, ${(finalAmount - resolvedAmountPaid).toFixed(2)} outstanding`
         : '') +

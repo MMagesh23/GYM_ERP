@@ -153,27 +153,40 @@ const BILLING_STATUS = {
 const summarizeMembershipBilling = (finalAmount, payments = []) => {
   const invoiced = Math.round((Number(finalAmount) || 0) * 100) / 100;
 
-  const collected = payments.reduce((sum, p) => {
-    if (p.status === 'failed') return sum; // nothing was ever received
+  let collected = 0;      // pure cash actually received (net of refunds)
+  let discountGiven = 0;  // total written off across all payments on this membership
+
+  payments.forEach((p) => {
+    if (p.status === 'failed') return; // nothing was ever received or forgiven
     const paid = p.amountPaid ?? p.finalAmount ?? 0;
     const refunded = p.refund?.refundedAmount || 0;
-    return sum + Math.max(paid - refunded, 0);
-  }, 0);
+    collected += Math.max(paid - refunded, 0);
+    discountGiven += Number(p.discount) || 0;
+  });
+
   const roundedCollected = Math.round(collected * 100) / 100;
-  const outstanding = Math.max(Math.round((invoiced - roundedCollected) * 100) / 100, 0);
+  const roundedDiscount = Math.round(discountGiven * 100) / 100;
+  const settled = roundedCollected + roundedDiscount;
+  const outstanding = Math.max(Math.round((invoiced - settled) * 100) / 100, 0);
 
   let status;
   if (invoiced <= 0) {
-    status = roundedCollected > 0 ? BILLING_STATUS.OVERPAID : BILLING_STATUS.UNBILLED;
-  } else if (roundedCollected <= 0) {
+    status = settled > 0 ? BILLING_STATUS.OVERPAID : BILLING_STATUS.UNBILLED;
+  } else if (settled <= 0) {
     status = BILLING_STATUS.UNPAID;
-  } else if (roundedCollected < invoiced) {
+  } else if (settled < invoiced) {
     status = BILLING_STATUS.PARTIAL;
   } else {
-    status = roundedCollected > invoiced ? BILLING_STATUS.OVERPAID : BILLING_STATUS.PAID;
+    status = settled > invoiced ? BILLING_STATUS.OVERPAID : BILLING_STATUS.PAID;
   }
 
-  return { invoiced, collected: roundedCollected, outstanding, status };
+  return {
+    invoiced,
+    collected: roundedCollected,
+    discountGiven: roundedDiscount,
+    outstanding,
+    status,
+  };
 };
 
 module.exports = {

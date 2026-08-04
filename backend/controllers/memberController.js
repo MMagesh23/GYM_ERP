@@ -11,6 +11,7 @@ const { generateMemberId } = require('../utils/idGenerator');
 const { summarizeMembershipBilling } = require('../utils/billing');
 const { sendTemplatedEmailAsync } = require('../utils/emailService');
 const { getExpiryWindow } = require('../utils/membershipExpiry');
+const { saveMemberPhoto, deleteBrandingAsset } = require('../utils/fileStorage');
 
 // Attaches a `billing` summary (invoiced/collected/outstanding/status) onto each
 // member's currentMembership so list/profile views can show "this member owes
@@ -120,12 +121,16 @@ const getMember = asyncHandler(async (req, res) => {
 // @route POST /api/members
 const createMember = asyncHandler(async (req, res) => {
   const memberId = await generateMemberId();
+  const { photo, photoPublicId, ...body } = req.body;
 
-  const member = await Member.create({
-    ...req.body,
-    memberId,
-    createdBy: req.user._id,
-  });
+  const payload = { ...body, memberId, createdBy: req.user._id };
+  if (req.file) {
+    const { url, publicId } = await saveMemberPhoto(req.file);
+    payload.photo = url;
+    payload.photoPublicId = publicId || '';
+  }
+
+  const member = await Member.create(payload);
 
   await logAudit(req, {
     action: 'create',
@@ -155,10 +160,25 @@ const updateMember = asyncHandler(async (req, res) => {
   const member = await Member.findById(req.params.id);
   if (!member) throw new ApiError(404, 'Member not found.');
 
-  // memberId is immutable once generated
-  const { memberId, ...updates } = req.body;
+  const { memberId, photo, photoPublicId, removePhoto, ...updates } = req.body;
   Object.assign(member, updates);
-  await member.save();
+
+  if (req.file) {
+    const previousPublicId = member.photoPublicId;
+    const { url, publicId } = await saveMemberPhoto(req.file);
+    member.photo = url;
+    member.photoPublicId = publicId || '';
+    await member.save();
+    await deleteBrandingAsset(previousPublicId);
+  } else if (removePhoto === 'true' || removePhoto === true) {
+    const previousPublicId = member.photoPublicId;
+    member.photo = '';
+    member.photoPublicId = '';
+    await member.save();
+    await deleteBrandingAsset(previousPublicId);
+  } else {
+    await member.save();
+  }
 
   await logAudit(req, { action: 'update', module: 'members', targetId: member._id, description: `Updated member ${member.memberId}` });
 
@@ -204,8 +224,10 @@ const deleteMember = asyncHandler(async (req, res) => {
   ]);
 
   const paymentsRetained = await Payment.countDocuments({ 'memberSnapshot.memberId': member.memberId });
+  const previousPhotoPublicId = member.photoPublicId;
 
   await member.deleteOne();
+  await deleteBrandingAsset(previousPhotoPublicId);
 
   await logAudit(req, {
     action: 'delete',

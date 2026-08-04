@@ -94,14 +94,19 @@ const summary = asyncHandler(async (req, res) => {
                 input: { $filter: { input: '$pmts', cond: { $ne: ['$$this.status', 'failed'] } } },
                 as: 'p',
                 in: {
-                  $max: [
+                  $add: [
                     {
-                      $subtract: [
-                        { $ifNull: ['$$p.amountPaid', '$$p.finalAmount'] },
-                        { $ifNull: ['$$p.refund.refundedAmount', 0] },
+                      $max: [
+                        {
+                          $subtract: [
+                            { $ifNull: ['$$p.amountPaid', '$$p.finalAmount'] },
+                            { $ifNull: ['$$p.refund.refundedAmount', 0] },
+                          ],
+                        },
+                        0,
                       ],
                     },
-                    0,
+                    { $ifNull: ['$$p.discount', 0] },
                   ],
                 },
               },

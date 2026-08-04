@@ -113,6 +113,7 @@ const paymentReport = asyncHandler(async (req, res) => {
       { header: 'Invoice #', key: 'invoiceNumber', width: 16 },
       { header: 'Member', key: 'member', width: 24 },
       { header: 'Amount', key: 'finalAmount', width: 12 },
+      { header: 'Discount', key: 'discount', width: 12 },
       { header: 'Collected', key: 'amountPaid', width: 12 },
       { header: 'Refunded', key: 'refunded', width: 12 },
       { header: 'Method', key: 'paymentMethod', width: 14 },
@@ -130,6 +131,7 @@ const paymentReport = asyncHandler(async (req, res) => {
         ? `${p.memberSnapshot.memberId} - ${p.memberSnapshot.name} (deleted)`
         : '',
       finalAmount: p.finalAmount,
+      discount: p.discount || 0,
       amountPaid: p.amountPaid ?? p.finalAmount,
       refunded: p.refund?.refundedAmount || 0,
       paymentMethod: p.paymentMethod,

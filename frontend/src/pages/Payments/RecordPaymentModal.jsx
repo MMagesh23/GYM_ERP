@@ -342,18 +342,31 @@ const RecordPaymentModal = ({ open, onClose, onSaved, presetMember, presetMember
               />
               {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount.message}</p>}
             </div>
-            {!dueMode && (
-              <>
-                <div>
-                  <label className={labelClass}>Discount</label>
-                  <input type="number" step="0.01" className={inputClass} {...register('discount')} />
-                </div>
-                <div>
-                  <label className={labelClass}>Tax</label>
-                  <input type="number" step="0.01" className={inputClass} {...register('tax')} />
-                </div>
-              </>
-            )}
+            <div>
+              <label className={labelClass}>Discount</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                {...register('discount', {
+                  min: { value: 0, message: 'Discount cannot be negative' },
+                  validate: (value) => Number(value || 0) <= (Number(watch('amount')) || 0) || 'Discount cannot exceed the amount',
+                })}
+              />
+              {errors.discount && <p className="mt-1 text-xs text-red-500">{errors.discount.message}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>Tax</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                {...register('tax', {
+                  min: { value: 0, message: 'Tax cannot be negative' },
+                })}
+              />
+              {errors.tax && <p className="mt-1 text-xs text-red-500">{errors.tax.message}</p>}
+            </div>
           </div>
 
           <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50/60 p-3 text-sm dark:border-brand-800 dark:bg-brand-900/20">

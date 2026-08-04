@@ -40,6 +40,7 @@ router.post(
     // legitimately start in; 'refunded'/'partially_refunded' are terminal states
     // only reachable via POST /:id/refund.
     body('status').optional().isIn(['paid', 'pending', 'partial', 'failed']).withMessage('status must be paid, pending, partial, or failed'),
+    body('discount').optional().isFloat({ min: 0 }).withMessage('Discount must be a non-negative number'),
     body('amountPaid').optional().isFloat({ min: 0 }).withMessage('amountPaid must be a non-negative number'),
   ],
   validate,

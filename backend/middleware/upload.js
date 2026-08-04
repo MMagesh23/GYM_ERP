@@ -20,6 +20,15 @@ const imageFilter = (req, file, cb) => {
   cb(new ApiError(400, 'Only image files are allowed.'));
 };
 
+// NEW — member photos: stricter than the generic imageFilter (which accepts
+// any image/*). Restricted to the formats explicitly required.
+const MEMBER_PHOTO_ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const memberPhotoFilter = (req, file, cb) => {
+  if (MEMBER_PHOTO_ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
+  cb(new ApiError(400, 'Only JPG, JPEG, PNG, or WebP images are allowed for member photos.'));
+};
+
 const SPREADSHEET_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
 
 const spreadsheetFilter = (req, file, cb) => {
@@ -40,6 +49,7 @@ const documentFilter = (req, file, cb) => {
 };
 
 const uploadPhoto = multer({ storage, fileFilter: imageFilter, limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadMemberPhoto = multer({ storage, fileFilter: memberPhotoFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 const uploadSpreadsheet = multer({ storage, fileFilter: spreadsheetFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 const uploadDocument = multer({ storage, fileFilter: documentFilter, limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -164,10 +174,33 @@ const verifyDocumentBuffer = async (req, res, next) => {
   }
 };
 
+const verifyMemberPhotoBuffer = async (req, res, next) => {
+  if (!req.file) return next();
+  logUploadDebug('memberPhoto', req);
+
+  if (!req.file.buffer || req.file.buffer.length === 0) {
+    return next(new ApiError(400, 'The uploaded file is empty.'));
+  }
+
+  try {
+    const detected = await fileTypeFromBuffer(req.file.buffer);
+    if (!detected || !MEMBER_PHOTO_ALLOWED_MIMES.includes(detected.mime)) {
+      return next(new ApiError(400, "The uploaded file's content does not match a supported image format (JPG, PNG, or WebP)."));
+    }
+    logUploadDebug('memberPhoto', req, { detectedType: detected.mime });
+    next();
+  } catch (err) {
+    console.error('[upload:memberPhoto] verification threw:', err.message);
+    next(new ApiError(400, 'Could not verify the uploaded file.'));
+  }
+};
+
 module.exports = {
   uploadPhoto,
   uploadSpreadsheet,
   uploadDocument,
+  uploadMemberPhoto,
   verifyImageBuffer,
   verifyDocumentBuffer,
+  verifyMemberPhotoBuffer,
 };

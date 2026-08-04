@@ -6,6 +6,7 @@ const memberSchema = new mongoose.Schema(
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, trim: true },
     photo: { type: String, default: '' },
+    photoPublicId: { type: String, default: '' },
     gender: { type: String, enum: ['male', 'female', 'other'], required: true },
     dob: { type: Date },
     bloodGroup: {

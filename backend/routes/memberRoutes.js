@@ -3,7 +3,7 @@ const { body } = require('express-validator');
 const { can } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const { protect } = require('../middleware/auth');
-const { uploadSpreadsheet } = require('../middleware/upload');
+const { uploadSpreadsheet, uploadMemberPhoto, verifyMemberPhotoBuffer } = require('../middleware/upload');
 const {
   listMembers,
   getMember,
@@ -30,8 +30,26 @@ router.post('/import', protect, can('members', 'create'), uploadSpreadsheet.sing
 
 router.get('/', protect, can('members', 'view'), listMembers);
 router.get('/:id', protect, can('members', 'view'), getMember);
-router.post('/', protect, can('members', 'create'), memberValidation, validate, createMember);
-router.put('/:id', protect, can('members', 'update'), memberValidation, validate, updateMember);
+router.post(
+  '/',
+  protect,
+  can('members', 'create'),
+  uploadMemberPhoto.single('photo'),
+  verifyMemberPhotoBuffer,
+  memberValidation,
+  validate,
+  createMember
+);
+router.put(
+  '/:id',
+  protect,
+  can('members', 'update'),
+  uploadMemberPhoto.single('photo'),
+  verifyMemberPhotoBuffer,
+  memberValidation,
+  validate,
+  updateMember
+);
 
 router.patch('/:id/status', protect, can('members', 'update'), changeStatus);
 router.delete('/:id', protect, can('members', 'delete'), deleteMember);

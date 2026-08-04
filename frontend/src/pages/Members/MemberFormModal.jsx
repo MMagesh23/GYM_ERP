@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { User, Phone, HeartPulse, StickyNote } from 'lucide-react';
+import { Camera, User, Phone, HeartPulse, StickyNote, X } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import Avatar from '../../components/common/Avatar';
 import { memberApi } from '../../services/memberApi';
@@ -18,8 +18,14 @@ const SectionHeading = ({ icon: Icon, title, subtitle }) => (
   </div>
 );
 
+const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_PHOTO_MB = 5;
+
 const MemberFormModal = ({ open, onClose, onSaved, member }) => {
   const isEdit = Boolean(member);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const {
     register,
     handleSubmit,
@@ -33,6 +39,9 @@ const MemberFormModal = ({ open, onClose, onSaved, member }) => {
 
   useEffect(() => {
     if (open) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setRemovePhoto(false);
       reset(
         member
           ? {
@@ -54,18 +63,53 @@ const MemberFormModal = ({ open, onClose, onSaved, member }) => {
     }
   }, [open, member, reset]);
 
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+      toast.error('Only JPG, PNG, or WebP images are allowed.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_PHOTO_MB * 1024 * 1024) {
+      toast.error(`Photo must be ${MAX_PHOTO_MB}MB or smaller.`);
+      e.target.value = '';
+      return;
+    }
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setRemovePhoto(false);
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setRemovePhoto(true);
+  };
+
   const onSubmit = async (data) => {
     try {
-      const payload = {
+      const formData = new FormData();
+      Object.entries({
         ...data,
         height: data.height ? Number(data.height) : undefined,
         weight: data.weight ? Number(data.weight) : undefined,
-      };
+      }).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          formData.append(key, val);
+        }
+      });
+      if (photoFile) {
+        formData.append('photo', photoFile);
+      } else if (removePhoto) {
+        formData.append('removePhoto', 'true');
+      }
+
       if (isEdit) {
-        await memberApi.update(member._id, payload);
+        await memberApi.update(member._id, formData);
         toast.success('Member updated');
       } else {
-        await memberApi.create(payload);
+        await memberApi.create(formData);
         toast.success('Member added');
       }
       onSaved();
@@ -83,11 +127,32 @@ const MemberFormModal = ({ open, onClose, onSaved, member }) => {
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Member' : 'Add Member'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="mb-5 flex items-center gap-3 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
-          <Avatar firstName={firstName} lastName={lastName} size="lg" photo={member?.photo} />
-          <div>
+          <div className="relative">
+            <Avatar firstName={firstName} lastName={lastName} size="lg" photo={photoPreview || (!removePhoto ? member?.photo : null)} />
+            <label className="absolute -bottom-1 -right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-brand-600 text-white shadow-sm hover:bg-brand-700">
+              <Camera size={12} />
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </label>
+          </div>
+          <div className="flex-1">
             <p className="text-sm font-medium">{firstName || lastName ? `${firstName || ''} ${lastName || ''}`.trim() : 'New member'}</p>
             <p className="text-xs text-gray-400">{isEdit ? member.memberId : 'A member ID will be generated automatically'}</p>
+            <p className="mt-0.5 text-[11px] text-gray-400">JPG, PNG, or WebP · up to {MAX_PHOTO_MB}MB · optional</p>
           </div>
+          {(photoPreview || (!removePhoto && member?.photo)) && (
+            <button
+              type="button"
+              onClick={handleRemovePhoto}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:border-gray-700 dark:hover:bg-red-950/40"
+            >
+              <X size={12} /> Remove photo
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">

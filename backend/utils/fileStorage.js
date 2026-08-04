@@ -52,12 +52,16 @@ const saveBufferToUploads = async (file, subfolder) => {
 // previous asset can be cleaned up instead of left orphaned in Cloudinary.
 // Other callers (equipment/staff photos, expense bills) are untouched —
 // they keep using saveBufferToUploads's plain-string return.
-const saveBrandingAsset = async (file, subfolder) => {
+const saveBrandingAsset = async (file, subfolder, transformation) => {
   if (cloudinaryConfigured) {
     try {
       return await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: `gym-erp/${subfolder}`, resource_type: 'image' },
+          {
+            folder: `gym-erp/${subfolder}`,
+            resource_type: 'image',
+            ...(transformation ? { transformation } : {}),
+          },
           (err, result) => (err ? reject(err) : resolve({ url: result.secure_url, publicId: result.public_id }))
         );
         stream.end(file.buffer);
@@ -70,6 +74,13 @@ const saveBrandingAsset = async (file, subfolder) => {
   return { url: saveToLocalDisk(file, subfolder), publicId: null };
 };
 
+const MEMBER_PHOTO_TRANSFORMATION = [
+  { width: 512, height: 512, crop: 'fill', gravity: 'face' },
+  { quality: 'auto:good', fetch_format: 'auto' },
+];
+
+const saveMemberPhoto = (file) => saveBrandingAsset(file, 'members', MEMBER_PHOTO_TRANSFORMATION);
+
 const deleteBrandingAsset = async (publicId) => {
   if (!publicId || !cloudinaryConfigured) return;
   try {
@@ -80,4 +91,10 @@ const deleteBrandingAsset = async (publicId) => {
   }
 };
 
-module.exports = { saveBufferToUploads, saveBrandingAsset, deleteBrandingAsset, cloudinaryConfigured };
+module.exports = {
+  saveBufferToUploads,
+  saveBrandingAsset,
+  saveMemberPhoto,
+  deleteBrandingAsset,
+  cloudinaryConfigured,
+};
