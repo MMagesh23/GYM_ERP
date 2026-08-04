@@ -47,7 +47,7 @@ const run = async () => {
   console.log('Default roles ensured.');
 
   // Default admin user
-  const adminEmail = 'admin@samgym.com';
+  const adminEmail = 'admin@samfitness.com';
   let admin = await User.findOne({ email: adminEmail });
   if (!admin) {
     admin = new User({ name: 'Super Admin', email: adminEmail, role: 'admin' });
