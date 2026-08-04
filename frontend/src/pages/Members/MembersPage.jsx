@@ -15,6 +15,7 @@ import StatCard from '../../components/common/StatCard';
 import Pagination from '../../components/common/Pagination';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import MemberFormModal from './MemberFormModal';
+import QuickAvatarUpload from '../../components/common/QuickAvatarUpload';
 import PageHeader from '../../components/common/PageHeader';
 import { SkeletonTable } from '../../components/common/Skeleton';
 import EmptyState from '../../components/common/EmptyState';
@@ -174,6 +175,15 @@ const MembersPage = () => {
       setImporting(false);
       e.target.value = '';
     }
+  };
+
+  // Patches just the photo fields for one row in place — avoids a full
+  // list refetch (and the pagination/filter/search state churn that would
+  // cause) after a quick avatar replace.
+  const patchMemberPhoto = (memberId, updated) => {
+    setMembers((prev) =>
+      prev.map((m) => (m._id === memberId ? { ...m, photo: updated.photo, photoPublicId: updated.photoPublicId } : m))
+    );
   };
 
   const clearFilters = () => {
@@ -349,15 +359,15 @@ const MembersPage = () => {
                 {members.map((m) => (
                   <tr key={m._id} className="group transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
                     <td className="px-4 py-3">
-                      <Link to={`/members/${m._id}`} className="flex items-center gap-3">
-                        <Avatar firstName={m.firstName} lastName={m.lastName} photo={m.photo} size="sm" />
-                        <div>
+                      <div className="flex items-center gap-3">
+                        <QuickAvatarUpload member={m} size="sm" onUpdated={(updated) => patchMemberPhoto(m._id, updated)} />
+                        <Link to={`/members/${m._id}`} className="min-w-0">
                           <p className="font-medium text-gray-900 group-hover:text-brand-600 dark:text-gray-100 dark:group-hover:text-brand-400">
                             {m.firstName} {m.lastName}
                           </p>
                           <p className="text-xs text-gray-400">{m.memberId}</p>
-                        </div>
-                      </Link>
+                        </Link>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-gray-700 dark:text-gray-300">{m.phone}</p>
