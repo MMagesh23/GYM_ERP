@@ -339,7 +339,7 @@ const PaymentsPage = () => {
                       <td className="px-4 py-3">
                         {m.member ? (
                           <div className="flex items-center gap-2.5">
-                            <Avatar firstName={m.member.firstName} lastName={m.member.lastName} size="sm" />
+                            <Avatar firstName={m.member.firstName} lastName={m.member.lastName} photo={m.member.photo} size="sm" />
                             <div>
                               <p className="font-medium text-gray-900 dark:text-gray-100">
                                 {m.member.firstName} {m.member.lastName || ''}

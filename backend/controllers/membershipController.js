@@ -470,7 +470,7 @@ const historyForMember = asyncHandler(async (req, res) => {
 // @route GET /api/memberships/outstanding
 const outstandingMemberships = asyncHandler(async (req, res) => {
   const memberships = await Membership.find({ status: { $in: ['active', 'frozen'] } })
-    .populate('member', 'memberId firstName lastName phone email')
+    .populate('member', 'memberId firstName lastName phone email photo')
     .populate('plan', 'name')
     .sort({ createdAt: -1 });
 
