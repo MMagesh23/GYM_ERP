@@ -12,6 +12,7 @@ const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./docs/openapi.json');
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(compression());

@@ -41,7 +41,7 @@ if (COOKIE_SAME_SITE === 'none' && !COOKIE_SECURE) {
   // Browsers reject SameSite=None cookies that aren't also Secure.
   console.warn(
     'REFRESH_COOKIE_SAMESITE=none requires REFRESH_COOKIE_SECURE=true (or NODE_ENV=production). ' +
-      'The refresh-token cookie will be rejected by browsers until this is fixed.'
+    'The refresh-token cookie will be rejected by browsers until this is fixed.'
   );
 }
 
@@ -115,6 +115,7 @@ const login = asyncHandler(async (req, res) => {
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user, session._id.toString());
   session.refreshTokenHash = hashToken(refreshToken);
+  session.lastRotationAt = new Date();
   await session.save();
 
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTS);
@@ -147,17 +148,29 @@ const refresh = asyncHandler(async (req, res) => {
   if (!user || !user.isActive) throw new ApiError(401, 'Account not found or disabled.');
   if (!session || session.revoked) throw new ApiError(401, 'Session has been revoked. Please log in again.');
 
-  if (session.refreshTokenHash !== hashToken(token)) {
-    // Reuse of a rotated-out token = compromised session. Kill it.
-    session.revoked = true;
-    session.revokedAt = new Date();
-    session.revokedReason = 'reuse_detected';
-    await session.save();
-    throw new ApiError(401, 'Refresh token has been invalidated. Please log in again.');
+  const RENEWAL_GRACE_PERIOD_MS = 30 * 1000;
+  const isGracePeriodActive = session.lastRotationAt && Date.now() - session.lastRotationAt.getTime() <= RENEWAL_GRACE_PERIOD_MS;
+  const incomingHash = hashToken(token);
+
+  if (session.refreshTokenHash !== incomingHash) {
+    if (isGracePeriodActive && session.previousRefreshTokenHash === incomingHash) {
+      // Race condition: a valid concurrent request hit the backend just after rotation succeeded.
+      // We allow it to fall through and rotate again. This ensures that the last concurrent
+      // request successfully leaves the client with a valid latest token, without triggering a revoke.
+    } else {
+      // Reuse of a rotated-out token = compromised session. Kill it.
+      session.revoked = true;
+      session.revokedAt = new Date();
+      session.revokedReason = 'reuse_detected';
+      await session.save();
+      throw new ApiError(401, 'Refresh token has been invalidated. Please log in again.');
+    }
   }
 
   const newRefreshToken = generateRefreshToken(user, session._id.toString());
+  session.previousRefreshTokenHash = incomingHash;
   session.refreshTokenHash = hashToken(newRefreshToken);
+  session.lastRotationAt = new Date();
   session.lastActiveAt = new Date();
   session.ipAddress = req.ip;
   await session.save();

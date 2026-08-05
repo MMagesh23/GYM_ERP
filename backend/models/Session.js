@@ -4,6 +4,8 @@ const sessionSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     refreshTokenHash: { type: String, required: true },
+    previousRefreshTokenHash: { type: String }, // NEW: grace period tracking
+    lastRotationAt: { type: Date }, // NEW: grace period tracking
     ipAddress: { type: String, default: '' },
     userAgent: { type: String, default: '' },
     deviceLabel: { type: String, default: '' }, // parsed from userAgent, e.g. "Chrome on Windows"
