@@ -328,7 +328,8 @@ const MembersPage = () => {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+          aria-label="Sort members"
+          className="min-w-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
