@@ -325,6 +325,7 @@ const PaymentsPage = () => {
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Invoiced</th>
                   <th className="px-4 py-3">Collected</th>
+                  <th className="px-4 py-3">Discount</th>
                   <th className="px-4 py-3">Outstanding</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Action</th>
@@ -353,6 +354,7 @@ const PaymentsPage = () => {
                       <td className="px-4 py-3">{m.plan?.name || '—'}</td>
                       <td className="px-4 py-3">{formatCurrency(m.billing.invoiced)}</td>
                       <td className="px-4 py-3">{formatCurrency(m.billing.collected)}</td>
+                      <td className="px-4 py-3 text-green-700 dark:text-green-400">{formatCurrency(m.billing.discountGiven)}</td>
                       <td className="px-4 py-3 font-medium text-red-600 dark:text-red-400">{formatCurrency(m.billing.outstanding)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.tone}`}>

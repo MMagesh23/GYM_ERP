@@ -557,7 +557,12 @@ const MemberProfilePage = () => {
                       <td className="px-4 py-3 capitalize">{p.paymentMethod.replace('_', ' ')}</td>
                       <td className="px-4 py-3">{formatDate(p.paymentDate)}</td>
                       <td className="px-4 py-3">
-                        <Badge status={p.status} />
+                        <div className="flex items-center gap-1">
+                          <Badge status={p.status} />
+                          {p.status === 'paid' && p.discount > 0 && p.amountPaid === 0 && (
+                            <span className="text-xs text-gray-400">(fully discounted)</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button

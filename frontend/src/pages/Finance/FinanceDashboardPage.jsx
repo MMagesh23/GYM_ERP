@@ -105,7 +105,7 @@ const FinanceDashboardPage = () => {
         <DateRangePicker from={range.from} to={range.to} onChange={setRange} />
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <StatCard
           icon={Wallet}
           label="Today's Collection"
@@ -133,6 +133,13 @@ const FinanceDashboardPage = () => {
           value={loading ? '' : formatCurrency(summary?.outstanding)}
           hint={!loading && summary?.outstandingCount ? `${summary.outstandingCount} membership${summary.outstandingCount === 1 ? '' : 's'}` : undefined}
           tone="amber"
+          loading={loading}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Discount Given"
+          value={loading ? '' : formatCurrency(summary?.discountGiven)}
+          tone="default"
           loading={loading}
         />
       </div>

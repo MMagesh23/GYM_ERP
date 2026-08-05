@@ -251,10 +251,16 @@ const RecordPaymentModal = ({ open, onClose, onSaved, presetMember, presetMember
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.tone}`}>{meta.label}</span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs text-amber-800/90 dark:text-amber-300/90">
+              <div className="grid grid-cols-4 gap-2 text-xs text-amber-800/90 dark:text-amber-300/90">
                 <div>
                   <p className="text-amber-600/70 dark:text-amber-400/70">Invoiced</p>
                   <p className="font-semibold">{formatCurrency(presetMembership?.billing?.invoiced)}</p>
+                </div>
+                <div>
+                  <p className="text-amber-600/70 dark:text-amber-400/70">Discount Given</p>
+                  <p className="font-semibold text-green-700 dark:text-green-400">
+                    {formatCurrency(presetMembership?.billing?.discountGiven)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-amber-600/70 dark:text-amber-400/70">Collected</p>

@@ -68,6 +68,7 @@ const financeSummary = asyncHandler(async (req, res) => {
     rangeExpenseByDay,
     methodBreakdown,
     outstandingAgg,
+    rangeDiscountAgg,
   ] = await Promise.all([
     Payment.aggregate([grossRevenueMatchStage('paymentDate', todayStart, todayEnd), { $group: { _id: null, total: { $sum: GROSS_COLLECTED_EXPR } } }]),
     Payment.aggregate([refundMatchStage(todayStart, todayEnd), { $group: { _id: null, total: { $sum: '$refund.refundedAmount' } } }]),
@@ -124,6 +125,10 @@ const financeSummary = asyncHandler(async (req, res) => {
       { $match: { outstanding: { $gt: 0 } } },
       { $group: { _id: null, total: { $sum: '$outstanding' }, count: { $sum: 1 } } },
     ]),
+    Payment.aggregate([
+      { $match: { paymentDate: { $gte: from, $lt: to }, status: { $ne: 'failed' } } },
+      { $group: { _id: null, total: { $sum: '$discount' } } },
+    ]),
   ]);
 
   const todayCollection = round2((todayGrossAgg[0]?.total || 0) - (todayRefundAgg[0]?.total || 0));
@@ -154,6 +159,7 @@ const financeSummary = asyncHandler(async (req, res) => {
       monthCollection,
       outstanding: outstandingAgg[0]?.total || 0,
       outstandingCount: outstandingAgg[0]?.count || 0,
+      discountGiven: round2(rangeDiscountAgg[0]?.total || 0),
       trend,
       paymentMethodBreakdown: methodBreakdown.map((m) => ({ method: m._id, total: round2(m.total), count: m.count })),
     },

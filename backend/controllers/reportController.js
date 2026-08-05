@@ -187,7 +187,7 @@ const computeMonthlyProfit = async (year) => {
   const start = new Date(year, 0, 1);
   const end = new Date(year + 1, 0, 1);
 
-  const [grossAgg, refundAgg, expenseAgg] = await Promise.all([
+  const [grossAgg, refundAgg, expenseAgg, discountAgg] = await Promise.all([
     Payment.aggregate([
       grossRevenueMatchStage('paymentDate', start, end),
       { $group: { _id: { $month: '$paymentDate' }, total: { $sum: GROSS_COLLECTED_EXPR } } },
@@ -200,6 +200,10 @@ const computeMonthlyProfit = async (year) => {
       { $match: { expenseDate: { $gte: start, $lt: end } } },
       { $group: { _id: { $month: '$expenseDate' }, total: { $sum: '$amount' } } },
     ]),
+    Payment.aggregate([
+      { $match: { paymentDate: { $gte: start, $lt: end }, status: { $ne: 'failed' } } },
+      { $group: { _id: { $month: '$paymentDate' }, total: { $sum: '$discount' } } },
+    ]),
   ]);
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -208,12 +212,14 @@ const computeMonthlyProfit = async (year) => {
     const refunds = refundAgg.find((r) => r._id === idx + 1)?.total || 0;
     const revenue = round2(gross - refunds); // net revenue
     const expense = expenseAgg.find((e) => e._id === idx + 1)?.total || 0;
+    const discountGiven = round2(discountAgg.find((d) => d._id === idx + 1)?.total || 0);
     return {
       month: label,
       grossRevenue: round2(gross),
       refunds: round2(refunds),
       revenue,
       expense,
+      discountGiven,
       profit: round2(revenue - expense),
     };
   });
@@ -233,6 +239,7 @@ const profitReport = asyncHandler(async (req, res) => {
       { header: 'Month', key: 'month', width: 10 },
       { header: 'Gross Revenue', key: 'grossRevenue', width: 16 },
       { header: 'Refunds', key: 'refunds', width: 14 },
+      { header: 'Discount Given', key: 'discountGiven', width: 14 },
       { header: 'Net Revenue', key: 'revenue', width: 14 },
       { header: 'Expenses', key: 'expense', width: 14 },
       { header: 'Profit', key: 'profit', width: 14 },
@@ -385,6 +392,7 @@ const cashFlowReport = asyncHandler(async (req, res) => {
       { header: 'Month', key: 'month', width: 10 },
       { header: 'Gross Revenue', key: 'grossRevenue', width: 16 },
       { header: 'Refunds', key: 'refunds', width: 14 },
+      { header: 'Discount Given', key: 'discountGiven', width: 14 },
       { header: 'Net Revenue', key: 'revenue', width: 14 },
       { header: 'Expenses', key: 'expense', width: 14 },
       { header: 'Net Cash Flow', key: 'profit', width: 16 },
