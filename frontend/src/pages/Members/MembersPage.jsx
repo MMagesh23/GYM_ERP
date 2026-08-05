@@ -25,6 +25,16 @@ import { daysUntil, membershipUrgency, expiryLabel, URGENCY_STYLES, formatCurren
 
 const STATUS_OPTIONS = ['active', 'expired', 'suspended', 'freeze', 'cancelled'];
 
+const SORT_OPTIONS = [
+  { value: '', label: 'Newest first' },
+  { value: 'createdAt:asc', label: 'Oldest first' },
+  { value: 'firstName:asc', label: 'Name (A–Z)' },
+  { value: 'firstName:desc', label: 'Name (Z–A)' },
+  { value: 'joiningDate:desc', label: 'Recently joined' },
+  { value: 'joiningDate:asc', label: 'Joined (oldest first)' },
+  { value: 'status:asc', label: 'Status' },
+];
+
 const ExpiryChip = ({ membership }) => {
   if (!membership) {
     return <span className="text-xs text-gray-400">No active plan</span>;
@@ -60,9 +70,12 @@ const MembersPage = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(true); // initial skeleton
   const [refreshing, setRefreshing] = useState(false); // subsequent fetches (smoother)
   const [summary, setSummary] = useState(null);
+
+  const [sortBy, sortDir] = sort ? sort.split(':') : [undefined, undefined];
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
@@ -73,7 +86,7 @@ const MembersPage = () => {
 
   const fetchMembers = useCallback(
     async (page = 1) => {
-      const isFirstLoad = pagination.total === 0 && !q && !status && !expiringDays;
+      const isFirstLoad = pagination.total === 0 && !q && !status && !expiringDays && !sort;
       isFirstLoad ? setLoading(true) : setRefreshing(true);
       try {
         const { data } = await memberApi.list({
@@ -82,6 +95,8 @@ const MembersPage = () => {
           q: q || undefined,
           status: status || undefined,
           expiringDays: expiringDays || undefined,
+          sortBy,
+          sortDir,
         });
         setMembers(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
@@ -92,7 +107,7 @@ const MembersPage = () => {
         setRefreshing(false);
       }
     },
-    [q, status, expiringDays] // eslint-disable-line react-hooks/exhaustive-deps
+    [q, status, expiringDays, sortBy, sortDir] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const fetchSummary = useCallback(async () => {
@@ -189,6 +204,7 @@ const MembersPage = () => {
   const clearFilters = () => {
     setQ('');
     setStatus('');
+    setSort('');
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('expiring');
@@ -196,7 +212,7 @@ const MembersPage = () => {
     });
   };
 
-  const hasFilters = Boolean(q || status || expiringDays);
+  const hasFilters = Boolean(q || status || expiringDays || sort);
 
   const statCards = useMemo(
     () => [
@@ -306,6 +322,17 @@ const MembersPage = () => {
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
               {s[0].toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>

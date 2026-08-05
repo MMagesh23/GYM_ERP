@@ -12,6 +12,12 @@ const { summarizeMembershipBilling } = require('../utils/billing');
 const { sendTemplatedEmailAsync } = require('../utils/emailService');
 const { getExpiryWindow } = require('../utils/membershipExpiry');
 const { saveMemberPhoto, deleteBrandingAsset } = require('../utils/fileStorage');
+const { buildSort } = require('../utils/sorting');
+
+// Whitelisted, indexed-or-cheap-to-sort fields only — mirrors the same
+// pattern paymentController.js already uses (PAYMENT_SORT_FIELDS) so an
+// arbitrary/unindexed field can never be requested from the client.
+const MEMBER_SORT_FIELDS = ['firstName', 'joiningDate', 'createdAt', 'status'];
 
 // Attaches a `billing` summary (invoiced/collected/outstanding/status) onto each
 // member's currentMembership so list/profile views can show "this member owes
@@ -44,11 +50,12 @@ const attachCurrentMembershipBilling = async (members) => {
 };
 
 // @desc  List members with pagination, search, and filters
-// @route GET /api/members?page=1&limit=20&q=&status=&gender=&expiringDays=
+// @route GET /api/members?page=1&limit=20&q=&status=&gender=&expiringDays=&sortBy=&sortDir=
 const listMembers = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.min(Number(req.query.limit) || 20, 100);
-  const { q, status, gender, joinedFrom, joinedTo, expiringDays } = req.query;
+  const { q, status, gender, joinedFrom, joinedTo, expiringDays, sortBy, sortDir } = req.query;
+  const sort = buildSort(sortBy, sortDir, MEMBER_SORT_FIELDS, { createdAt: -1 });
 
   // NOTE: members are hard-deleted (see deleteMember below), so there is no
   // `isDeleted` flag to filter on anymore — a member that exists in the
@@ -90,7 +97,7 @@ const listMembers = asyncHandler(async (req, res) => {
   const [members, total] = await Promise.all([
     Member.find(filter)
       .populate({ path: 'currentMembership', populate: { path: 'plan', select: 'name durationType' } })
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit),
     Member.countDocuments(filter),
