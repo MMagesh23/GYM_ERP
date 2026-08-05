@@ -23,7 +23,7 @@ const attachCurrentMembershipBilling = async (members) => {
   if (membershipIds.length === 0) return members;
 
   const payments = await Payment.find({ membership: { $in: membershipIds } })
-    .select('membership finalAmount amountPaid status refund.refundedAmount')
+    .select('membership finalAmount amountPaid discount status refund.refundedAmount')
     .lean();
   const byMembership = payments.reduce((acc, p) => {
     const key = String(p.membership);
