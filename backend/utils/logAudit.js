@@ -7,19 +7,6 @@ const AuditLog = require('../models/AuditLog');
  */
 const logAudit = async (req, entry) => {
   try {
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    let ttlDays = 90; // Normal activity logs
-
-    if (['login', 'logout'].includes(entry.action)) {
-      ttlDays = 30;
-    } else if (['payment', 'refund'].includes(entry.action) || entry.module === 'payments') {
-      ttlDays = 365;
-    } else if (req.user?.role === 'admin' || entry.module === 'auth') {
-      ttlDays = 180;
-    }
-
-    const expiresAt = new Date(Date.now() + ttlDays * DAY_MS);
-
     await AuditLog.create({
       user: req.user?._id,
       action: entry.action,
@@ -28,7 +15,6 @@ const logAudit = async (req, entry) => {
       description: entry.description || '',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'] || '',
-      expiresAt,
     });
   } catch (err) {
     // Never let audit logging break the main request flow

@@ -14,7 +14,6 @@ const auditLogSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     ipAddress: { type: String, default: '' },
     userAgent: { type: String, default: '' },
-    expiresAt: { type: Date, required: true, index: { expires: 0 } },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
