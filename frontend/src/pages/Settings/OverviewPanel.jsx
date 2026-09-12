@@ -48,7 +48,7 @@ const OverviewPanel = ({ settings, roleCount, staffCount, onNavigate }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-5">
           <h3 className="mb-1 text-sm font-semibold">Modules</h3>
           <p className="mb-2 text-xs text-gray-400">Disabling a module hides it from navigation and blocks its API routes.</p>
           <StatusRow label="Equipment tracking" ok={features.equipmentModule} />
@@ -57,7 +57,7 @@ const OverviewPanel = ({ settings, roleCount, staffCount, onNavigate }) => {
           <StatusRow label="QR code member IDs" ok={features.qrCode} />
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-5">
           <h3 className="mb-1 text-sm font-semibold">Notification delivery</h3>
           <p className="mb-2 text-xs text-gray-400">In-app notifications always run. Email/SMS/WhatsApp require provider setup — not yet connected.</p>
           <StatusRow label="In-app (system)" ok={true} hint="Always on" />
