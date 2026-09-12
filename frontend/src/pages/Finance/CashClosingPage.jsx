@@ -204,14 +204,14 @@ const CashClosingPage = () => {
       )}
 
       <h3 className="mb-3 text-sm font-semibold">Closing History</h3>
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {historyLoading ? (
           <SkeletonTable rows={6} cols={7} />
         ) : history.length === 0 ? (
           <EmptyState icon={Lock} title="No closings recorded yet" description="Close today's drawer to start building history." />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Opening</th>
@@ -222,9 +222,9 @@ const CashClosingPage = () => {
                 <th className="px-4 py-3">Closed By</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {history.map((h) => (
-                <tr key={h._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <tr key={h._id} className="hover:bg-white/30 dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-medium">{formatDate(h.date)}</td>
                   <td className="px-4 py-3">{formatCurrency(h.openingCash)}</td>
                   <td className="px-4 py-3 text-red-600 dark:text-red-400">{formatCurrency(h.cashRefunds)}</td>
