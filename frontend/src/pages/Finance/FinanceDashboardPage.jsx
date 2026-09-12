@@ -145,7 +145,7 @@ const FinanceDashboardPage = () => {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900 lg:col-span-2">
+        <div className="glass-panel p-4 lg:col-span-2">
           <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Revenue vs Expenses</h3>
           {loading ? (
             <SkeletonCard className="h-[260px]" />
@@ -165,7 +165,7 @@ const FinanceDashboardPage = () => {
           )}
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Payment Methods</h3>
           {loading ? (
             <SkeletonCard className="h-[260px]" />
@@ -195,7 +195,7 @@ const FinanceDashboardPage = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-panel p-4">
         <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-600 dark:text-gray-300">
           <PiggyBank size={15} /> Revenue by Membership Plan
         </h3>
