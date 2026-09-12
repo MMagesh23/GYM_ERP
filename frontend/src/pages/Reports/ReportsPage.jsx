@@ -23,7 +23,7 @@ const ReportsPage = () => {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {REPORTS.map((r) => (
-          <div key={r.key} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <div key={r.key} className="glass-panel p-5">
             <h3 className="mb-1 font-semibold">{r.label}</h3>
             <p className="mb-4 text-sm text-gray-500">{r.description}</p>
             <div className="flex flex-wrap gap-2">
