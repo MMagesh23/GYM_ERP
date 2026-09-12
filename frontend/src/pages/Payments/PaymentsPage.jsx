@@ -130,7 +130,7 @@ const PaymentsPage = () => {
         }
       />
 
-      <div className="mb-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+      <div className="mb-5 flex gap-1 border-b border-white/30 dark:border-white/10">
         <button
           onClick={() => switchTab('payments')}
           className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
@@ -200,7 +200,7 @@ const PaymentsPage = () => {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={6} />
         ) : payments.length === 0 ? (
@@ -225,7 +225,7 @@ const PaymentsPage = () => {
           />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Invoice #</th>
                 <th className="px-4 py-3">Member</th>
@@ -236,11 +236,11 @@ const PaymentsPage = () => {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {payments.map((p) => {
                 const outstanding = Math.max(p.finalAmount - (p.amountPaid ?? p.finalAmount), 0);
                 return (
-                  <tr key={p._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                  <tr key={p._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                     <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
                     <td className="px-4 py-3">
                       {p.member ? `${p.member.memberId} - ${p.member.firstName} ${p.member.lastName || ''}` : '—'}
@@ -308,7 +308,7 @@ const PaymentsPage = () => {
       )}
 
       {tab === 'dues' && (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-table">
           {duesLoading ? (
             <SkeletonTable rows={6} cols={5} />
           ) : dues.length === 0 ? (
@@ -319,7 +319,7 @@ const PaymentsPage = () => {
             />
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+              <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
                 <tr>
                   <th className="px-4 py-3">Member</th>
                   <th className="px-4 py-3">Plan</th>
@@ -331,11 +331,11 @@ const PaymentsPage = () => {
                   <th className="px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody className="divide-y divide-white/20 dark:divide-white/5">
                 {dues.map((m) => {
                   const meta = billingStatusMeta(m.billing.status);
                   return (
-                    <tr key={m._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <tr key={m._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                       <td className="px-4 py-3">
                         {m.member ? (
                           <div className="flex items-center gap-2.5">
