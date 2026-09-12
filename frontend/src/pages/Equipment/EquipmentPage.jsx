@@ -127,7 +127,7 @@ const EquipmentPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
         ) : items.length === 0 ? (
@@ -152,7 +152,7 @@ const EquipmentPage = () => {
           />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Equipment ID</th>
                 <th className="px-4 py-3">Name</th>
@@ -162,9 +162,9 @@ const EquipmentPage = () => {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {items.map((item) => (
-                <tr key={item._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <tr key={item._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-medium">
                     <Link to={`/equipment/${item._id}`} className="text-brand-600 hover:underline">
                       {item.equipmentId}
