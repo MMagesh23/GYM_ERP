@@ -46,7 +46,7 @@ const EquipmentDetailPage = () => {
         <ArrowLeft size={16} /> Back to equipment
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-panel mb-6 flex flex-wrap items-start justify-between gap-4 p-5">
         <div>
           <h1 className="text-xl font-semibold">{equipment.name}</h1>
           <p className="text-sm text-gray-500">
@@ -82,7 +82,7 @@ const EquipmentDetailPage = () => {
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+          <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
             <tr>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Description</th>
@@ -92,7 +92,7 @@ const EquipmentDetailPage = () => {
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+          <tbody className="divide-y divide-white/20 dark:divide-white/5">
             {(equipment.maintenanceHistory || []).length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
