@@ -115,7 +115,7 @@ const ExpensesPage = () => {
           </>
         ) : (
           <>
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+            <div className="glass-panel p-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Monthly Expenses ({new Date().getFullYear()})</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={monthlyChartData}>
@@ -127,7 +127,7 @@ const ExpensesPage = () => {
               </ResponsiveContainer>
             </div>
 
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+            <div className="glass-panel p-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">By Category</h3>
               {analytics.byCategory.length === 0 ? (
                 <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No expense data yet</p>
@@ -164,7 +164,7 @@ const ExpensesPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
         ) : expenses.length === 0 ? (
@@ -188,7 +188,7 @@ const ExpensesPage = () => {
           />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Category</th>
@@ -198,9 +198,9 @@ const ExpensesPage = () => {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {expenses.map((e) => (
-                <tr key={e._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <tr key={e._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-medium">{e.title}</td>
                   <td className="px-4 py-3 capitalize">{e.category}</td>
                   <td className="px-4 py-3">₹{e.amount}</td>
