@@ -369,7 +369,7 @@ const MemberProfilePage = () => {
 
       {/* Stat row */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-4">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
             <ShieldCheck size={13} /> Current Plan
           </p>
@@ -377,7 +377,7 @@ const MemberProfilePage = () => {
           {activeMembership && <p className="text-xs text-gray-400">{formatCurrency(activeMembership.finalAmount)}</p>}
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-4">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
             <CalendarClock size={13} /> Membership Status
           </p>
@@ -395,7 +395,7 @@ const MemberProfilePage = () => {
           )}
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-4">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
             <CreditCard size={13} /> Total Paid
           </p>
@@ -416,7 +416,7 @@ const MemberProfilePage = () => {
           )}
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card dark:border-gray-800 dark:bg-gray-900">
+        <div className="glass-panel p-4">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
             <Cake size={13} /> Member Since
           </p>
@@ -426,7 +426,7 @@ const MemberProfilePage = () => {
       </div>
 
       {/* Tabs */}
-      <div className="mb-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+      <div className="mb-5 flex gap-1 border-b border-white/30 dark:border-white/10">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -454,7 +454,7 @@ const MemberProfilePage = () => {
 
       {tab === 'overview' && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <div className="glass-panel p-5">
             <h3 className="mb-1 text-sm font-semibold">Personal details</h3>
             <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
               <InfoRow icon={Cake} label="Date of birth" value={member.dob ? formatDate(member.dob) : null} />
@@ -463,7 +463,7 @@ const MemberProfilePage = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <div className="glass-panel p-5">
             <h3 className="mb-1 text-sm font-semibold">Health & physical</h3>
             <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
               <InfoRow icon={Ruler} label="Height" value={member.height ? `${member.height} cm` : null} />
@@ -473,7 +473,7 @@ const MemberProfilePage = () => {
           </div>
 
           {member.notes && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 lg:col-span-2 dark:border-gray-800 dark:bg-gray-900">
+            <div className="glass-panel p-5 lg:col-span-2">
               <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
                 <StickyNote size={14} /> Notes
               </h3>
@@ -522,7 +522,7 @@ const MemberProfilePage = () => {
             <EmptyState icon={CreditCard} title="No payments yet" description="Payments recorded for this member will show up here." />
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+              <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
                 <tr>
                   <th className="px-4 py-3">Invoice #</th>
                   <th className="px-4 py-3">Amount</th>
@@ -532,11 +532,11 @@ const MemberProfilePage = () => {
                   <th className="px-4 py-3 text-right">Invoice</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody className="divide-y divide-white/20 dark:divide-white/5">
                 {payments.map((p) => {
                   const outstanding = Math.max(p.finalAmount - (p.amountPaid ?? p.finalAmount), 0);
                   return (
-                    <tr key={p._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <tr key={p._id} className="hover:bg-white/30 dark:hover:bg-white/5">
                       <td className="px-4 py-3 font-medium">{p.invoiceNumber}</td>
                       <td className="px-4 py-3">
                         {formatCurrency(p.finalAmount)}
