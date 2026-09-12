@@ -81,7 +81,7 @@ const AuditLogsPage = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={10} cols={6} />
         ) : logs.length === 0 ? (
@@ -92,7 +92,7 @@ const AuditLogsPage = () => {
           />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Action</th>
@@ -102,9 +102,9 @@ const AuditLogsPage = () => {
                 <th className="px-4 py-3">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {logs.map((log) => (
-                <tr key={log._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <tr key={log._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                   <td className="px-4 py-3">{log.user ? `${log.user.name} (${log.user.role})` : 'System'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${ACTION_COLORS[log.action] || ''}`}>
