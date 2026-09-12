@@ -109,7 +109,7 @@ const EmailHistoryPanel = () => {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900">
+      <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
         ) : logs.length === 0 ? (
@@ -120,7 +120,7 @@ const EmailHistoryPanel = () => {
           />
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+            <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Recipient</th>
                 <th className="px-4 py-3">Subject</th>
@@ -129,9 +129,9 @@ const EmailHistoryPanel = () => {
                 <th className="px-4 py-3">Date &amp; Time</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-white/20 dark:divide-white/5">
               {logs.map((log) => (
-                <tr key={log._id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <tr key={log._id} className="transition hover:bg-white/30 dark:hover:bg-white/5">
                   <td className="px-4 py-3">{log.recipient}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{log.subject}</td>
                   <td className="px-4 py-3 text-gray-400">{TEMPLATE_LABELS[log.templateType] ?? log.templateType}</td>
