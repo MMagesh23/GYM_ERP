@@ -162,7 +162,7 @@ const DashboardPage = () => {
           {chartKeys.length > 0 && charts && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {chartKeys.includes('revenueChart') && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <div className="glass-panel p-4">
                   <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Revenue ({charts.year})</h3>
                   {revenueData.length === 0 ? (
                     <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No revenue data yet</p>
@@ -181,7 +181,7 @@ const DashboardPage = () => {
               )}
 
               {chartKeys.includes('membershipGrowthChart') && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <div className="glass-panel p-4">
                   <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Growth ({charts.year})</h3>
                   {membershipGrowthData.length === 0 ? (
                     <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No new members yet this year</p>
@@ -199,7 +199,7 @@ const DashboardPage = () => {
               )}
 
               {chartKeys.includes('profitChart') && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <div className="glass-panel p-4">
                   <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Profit Analysis ({charts.year})</h3>
                   {profitData.length === 0 ? (
                     <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No profit data yet</p>
@@ -218,7 +218,7 @@ const DashboardPage = () => {
               )}
 
               {chartKeys.includes('planDistributionChart') && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <div className="glass-panel p-4">
                   <h3 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Membership Type Distribution</h3>
                   {planDistributionData.length === 0 ? (
                     <p className="flex h-[220px] items-center justify-center text-sm text-gray-400">No active memberships yet</p>
