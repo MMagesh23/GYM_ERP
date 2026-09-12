@@ -189,8 +189,7 @@ const RecordPaymentModal = ({ open, onClose, onSaved, presetMember, presetMember
     }
   };
 
-  const inputClass =
-    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800';
+  const inputClass = 'glass-input';
   const labelClass = 'mb-1 block text-sm font-medium';
 
   const pendingTotal = pendingForMember.reduce((sum, p) => sum + (p.finalAmount - (p.amountPaid || 0)), 0);
