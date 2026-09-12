@@ -137,3 +137,168 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 .stat-value-empty {
   @apply text-gray-300 dark:text-gray-700;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIQUID GLASS DESIGN SYSTEM
+   Append this whole block to the END of frontend/src/index.css
+   Purely additive — nothing existing is removed or renamed, so no other
+   file breaks. New utility classes only; apply them via className swaps.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.45);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 8px 32px rgba(31, 41, 55, 0.10), 0 1.5px 4px rgba(31, 41, 55, 0.06);
+}
+.dark {
+  --glass-bg: rgba(23, 27, 38, 0.55);
+  --glass-bg-strong: rgba(23, 27, 38, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1.5px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Ambient gradient wash sitting behind the whole app — gives the blur
+   something soft/colorful to refract. Applied to the app shell background,
+   see AppLayout.jsx's outer <div>. Purely decorative, fixed position,
+   pointer-events none, so it never interferes with clicks/scroll. */
+.liquid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.liquid-backdrop::before,
+.liquid-backdrop::after {
+  content: '';
+  position: absolute;
+  width: 42vw;
+  height: 42vw;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.35;
+}
+.liquid-backdrop::before {
+  top: -12%;
+  left: -8%;
+  background: radial-gradient(circle, var(--brand-400) 0%, transparent 70%);
+}
+.liquid-backdrop::after {
+  bottom: -14%;
+  right: -6%;
+  background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
+}
+.dark .liquid-backdrop::before,
+.dark .liquid-backdrop::after {
+  opacity: 0.18;
+}
+
+@layer components {
+  /* Base glass surface — swap onto any card/panel/table container that
+     currently reads: rounded-2xl border border-gray-200 bg-white ... */
+  .glass-panel {
+    @apply relative rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+  .glass-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-highlight), transparent 40%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Same surface but for the table-style containers that use rounded-xl */
+  .glass-table {
+    @apply relative overflow-hidden rounded-xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /* Stronger/more opaque glass for surfaces that sit above scrolling
+     content and need to stay legible: sidebar, header, modals, dropdowns. */
+  .glass-nav {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  .glass-modal {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+  }
+
+  /* Table header row / zebra rows tuned for translucency instead of solid gray-50 */
+  .glass-thead {
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+  }
+  .dark .glass-thead {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  /* Inputs that sit on glass need a touch more contrast than the plain .input class */
+  .glass-input {
+    @apply w-full rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400
+           focus:outline-none focus:ring-1 focus:ring-brand-500
+           dark:text-gray-100 dark:placeholder:text-gray-500;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(8px);
+  }
+  .dark .glass-input {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Pill/segment nav items (sidebar links, settings tabs) */
+  .glass-pill-active {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 2px 10px rgba(29, 113, 239, 0.18);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Buttons — glassy primary keeps the brand color but reads as frosted */
+  .btn-primary-glass {
+    @apply btn text-white shadow-sm active:scale-[0.98];
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  .btn-secondary-glass {
+    @apply btn text-gray-700 dark:text-gray-200;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+  }
+}
+
+/* Fallback for browsers without backdrop-filter support (older Safari/Firefox) */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel, .glass-table, .glass-nav, .glass-modal, .glass-thead, .glass-input {
+    background: rgba(255, 255, 255, 0.92) !important;
+  }
+  .dark .glass-panel, .dark .glass-table, .dark .glass-nav,
+  .dark .glass-modal, .dark .glass-thead, .dark .glass-input {
+    background: rgba(23, 27, 38, 0.92) !important;
+  }
+}
