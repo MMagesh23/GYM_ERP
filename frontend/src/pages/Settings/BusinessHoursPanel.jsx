@@ -52,7 +52,7 @@ const BusinessHoursPanel = ({ initial, onSaved }) => {
 
       <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+          <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
             <tr>
               <th className="px-3 py-2">Day</th>
               <th className="px-3 py-2">Open</th>
@@ -60,7 +60,7 @@ const BusinessHoursPanel = ({ initial, onSaved }) => {
               <th className="px-3 py-2 text-center">Closed</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+          <tbody className="divide-y divide-white/20 dark:divide-white/5">
             {DAYS.map(([key, label]) => {
               const row = rows.find((r) => r.day === key) || defaultRow(key);
               return (
