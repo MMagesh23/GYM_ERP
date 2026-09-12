@@ -1,16 +1,13 @@
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 const TONE_STYLES = {
-  default: 'text-brand-600 bg-brand-50 dark:bg-brand-900/30',
-  green: 'text-green-600 bg-green-50 dark:bg-green-900/30',
-  red: 'text-red-600 bg-red-50 dark:bg-red-900/30',
-  amber: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30',
-  purple: 'text-purple-600 bg-purple-50 dark:bg-purple-900/30',
+  default: 'text-brand-600 bg-white/40 dark:bg-white/5',
+  green: 'text-green-600 bg-white/40 dark:bg-white/5',
+  red: 'text-red-600 bg-white/40 dark:bg-white/5',
+  amber: 'text-amber-600 bg-white/40 dark:bg-white/5',
+  purple: 'text-purple-600 bg-white/40 dark:bg-white/5',
 };
 
-// NEW: optional trend indicator (e.g. { value: 12, direction: 'up' }) for
-// cards that have a period-over-period comparison available. Entirely
-// optional — omitting `trend` renders exactly as before.
 const StatCard = ({ icon: Icon, label, value, tone = 'default', hint, trend, loading = false, onClick }) => {
   const Wrapper = onClick ? 'button' : 'div';
   const isEmpty = !loading && (value === 0 || value === '0' || value === '₹0');
@@ -19,7 +16,7 @@ const StatCard = ({ icon: Icon, label, value, tone = 'default', hint, trend, loa
     <Wrapper
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`card-hoverable w-full p-4 text-left ${onClick ? 'cursor-pointer hover:border-brand-300 dark:hover:border-brand-800' : ''}`}
+      className={`glass-panel w-full p-4 text-left transition hover:-translate-y-0.5 ${onClick ? 'cursor-pointer' : ''}`}
     >
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-500">{label}</span>
