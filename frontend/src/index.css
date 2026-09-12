@@ -90,11 +90,11 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   }
 
   .card {
-    @apply rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900;
+    @apply glass-panel;
   }
 
   .card-hoverable {
-    @apply card transition hover:shadow-card-hover hover:-translate-y-0.5;
+    @apply glass-panel transition hover:shadow-card-hover hover:-translate-y-0.5;
   }
 }
 
