@@ -16,9 +16,6 @@ const NAV_ITEMS = [
   { to: '/members', label: 'Members', icon: Users, roles: ['admin', 'receptionist'] },
   { to: '/membership-plans', label: 'Plans', icon: ClipboardList, roles: ['admin'] },
   { to: '/payments', label: 'Payments', icon: CreditCard, roles: ['admin', 'receptionist'] },
-  // NEW — Finance dashboard + cash closing. View access is further narrowed
-  // server-side per the user's finance permission (RBAC), same pattern as
-  // every other nav item's feature/role gate.
   { to: '/finance', label: 'Finance', icon: PiggyBank, roles: ['admin', 'receptionist'], feature: 'financeModule' },
   { to: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin'], feature: 'financeModule' },
   { to: '/equipment', label: 'Equipment', icon: Dumbbell, roles: ['admin', 'receptionist'], feature: 'equipmentModule' },
@@ -31,7 +28,6 @@ const NAV_ITEMS = [
 const initials = (name = '') =>
   name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
-// Detect the platform so the header hint shows the right modifier key
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 const AppLayout = () => {
@@ -55,9 +51,6 @@ const AppLayout = () => {
     navigate('/login', { replace: true });
   };
 
-  // Opens the command palette by simulating its own keyboard shortcut, so this
-  // button and the real ⌘K/Ctrl+K shortcut always stay in sync with one
-  // implementation living inside CommandPalette itself.
   const openCommandPalette = () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: isMac, ctrlKey: !isMac }));
   };
@@ -73,13 +66,9 @@ const AppLayout = () => {
   const BrandMark = ({ collapsed }) => (
     <div className={`flex items-center gap-2.5 px-5 py-5 ${collapsed ? 'justify-center px-0' : ''}`}>
       {gymLogo ? (
-        <img
-          src={gymLogo}
-          alt={gymName}
-          className="h-8 w-8 shrink-0 rounded-lg object-cover"
-        />
+        <img src={gymLogo} alt={gymName} className="h-8 w-8 shrink-0 rounded-lg object-cover ring-1 ring-white/40" />
       ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 text-sm font-bold text-white shadow-sm">
           {gymName.charAt(0).toUpperCase()}
         </div>
       )}
@@ -95,19 +84,19 @@ const AppLayout = () => {
     <>
       <BrandMark collapsed={collapsed} />
 
-      <nav className="flex-1 space-y-0.5 px-3">
+      <nav className="flex-1 space-y-1 px-3">
         {visibleItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+              `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                 collapsed ? 'justify-center px-0' : ''
               } ${
                 isActive
-                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-brand-600'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                  ? 'glass-pill-active text-brand-700 dark:text-brand-300'
+                  : 'text-gray-600 hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5'
               }`
             }
           >
@@ -117,11 +106,11 @@ const AppLayout = () => {
         ))}
       </nav>
 
-      <div className="border-t border-gray-100 p-3 dark:border-gray-800">
+      <div className="border-t border-white/30 p-3 dark:border-white/10">
         <button
           onClick={() => dispatch(toggleTheme())}
           title={collapsed ? (theme === 'light' ? 'Dark mode' : 'Light mode') : undefined}
-          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 ${collapsed ? 'justify-center px-0' : ''}`}
+          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-600 hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5 ${collapsed ? 'justify-center px-0' : ''}`}
         >
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           {!collapsed && (theme === 'light' ? 'Dark mode' : 'Light mode')}
@@ -131,20 +120,23 @@ const AppLayout = () => {
   );
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Global ⌘K / Ctrl+K palette — mounted once, listens for its own shortcut */}
+    <div className="relative flex h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Ambient decorative gradient behind the whole app so glass surfaces
+          have something to refract. Fixed, non-interactive. */}
+      <div className="liquid-backdrop" />
+
       <CommandPalette userRole={user?.role} />
 
       <aside
-        className={`hidden md:flex flex-col border-r border-gray-200 bg-white transition-all duration-200 dark:border-gray-800 dark:bg-gray-900 ${
+        className={`relative z-10 hidden md:flex flex-col glass-nav border-r transition-all duration-200 ${
           sidebarCollapsed ? 'w-[68px]' : 'w-64'
         }`}
       >
         <SidebarContent collapsed={sidebarCollapsed} />
-        <div className="border-t border-gray-100 p-2 dark:border-gray-800">
+        <div className="border-t border-white/30 p-2 dark:border-white/10">
           <button
             onClick={() => dispatch(toggleSidebar())}
-            className="flex w-full items-center justify-center rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
+            className="flex w-full items-center justify-center rounded-xl p-2 text-gray-400 hover:bg-white/40 hover:text-gray-600 dark:hover:bg-white/5"
           >
             {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
           </button>
@@ -153,48 +145,47 @@ const AppLayout = () => {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 animate-slide-in-right flex-col bg-white dark:bg-gray-900">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-64 animate-slide-in-right flex-col glass-nav border-r">
             <div className="flex items-center justify-between px-4 pt-4">
               <div className="flex items-center gap-2">
                 {gymLogo ? (
                   <img src={gymLogo} alt={gymName} className="h-7 w-7 rounded-lg object-cover" />
                 ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white">
                     {gymName.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <span className="truncate text-lg font-semibold">{gymName}</span>
               </div>
-              <button onClick={() => setMobileOpen(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <button onClick={() => setMobileOpen(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-white/40 dark:hover:bg-white/5">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Mobile search entry point — opens the same command palette */}
             <div className="px-4 pt-3">
               <button
                 onClick={() => {
                   setMobileOpen(false);
                   setTimeout(openCommandPalette, 150);
                 }}
-                className="flex w-full items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-400 dark:border-gray-700"
+                className="flex w-full items-center gap-2 rounded-xl glass-input px-3 py-2 text-sm text-gray-400"
               >
                 <Search size={15} /> Search members, pages...
               </button>
             </div>
 
             <div className="flex flex-1 flex-col pt-2">
-              <nav className="flex-1 space-y-0.5 px-3 pt-2">
+              <nav className="flex-1 space-y-1 px-3 pt-2">
                 {visibleItems.map(({ to, label, icon: Icon }) => (
                   <NavLink
                     key={to}
                     to={to}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                         isActive
-                          ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-                          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                          ? 'glass-pill-active text-brand-700 dark:text-brand-300'
+                          : 'text-gray-600 hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5'
                       }`
                     }
                   >
@@ -203,10 +194,10 @@ const AppLayout = () => {
                   </NavLink>
                 ))}
               </nav>
-              <div className="border-t border-gray-100 p-3 dark:border-gray-800">
+              <div className="border-t border-white/30 p-3 dark:border-white/10">
                 <button
                   onClick={() => dispatch(toggleTheme())}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-600 hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5"
                 >
                   {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
                   {theme === 'light' ? 'Dark mode' : 'Light mode'}
@@ -217,24 +208,23 @@ const AppLayout = () => {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
+      <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
+        <header className="flex items-center justify-between gap-3 glass-nav border-b px-4 py-2.5 sm:px-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 md:hidden">
+            <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-gray-500 hover:bg-white/40 dark:hover:bg-white/5 md:hidden">
               <Menu size={20} />
             </button>
             <span className="text-sm font-medium text-gray-500">{currentPage?.label || ''}</span>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Desktop search trigger — the real shortcut works from anywhere regardless */}
             <button
               onClick={openCommandPalette}
-              className="hidden items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-400 transition hover:bg-gray-50 hover:text-gray-600 dark:border-gray-700 dark:hover:bg-gray-800 sm:flex"
+              className="hidden items-center gap-1.5 rounded-xl glass-input px-2.5 py-1.5 text-xs text-gray-400 hover:text-gray-600 sm:flex"
             >
               <Search size={13} />
               <span>Search</span>
-              <kbd className="rounded bg-gray-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-gray-400 dark:bg-gray-800">
+              <kbd className="rounded bg-white/50 px-1.5 py-0.5 font-sans text-[10px] font-medium text-gray-400 dark:bg-white/10">
                 {isMac ? '⌘K' : 'Ctrl+K'}
               </kbd>
             </button>
@@ -244,9 +234,9 @@ const AppLayout = () => {
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen((o) => !o)}
-                className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="flex items-center gap-2 rounded-xl px-1.5 py-1 hover:bg-white/40 dark:hover:bg-white/5"
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-semibold text-white shadow-sm">
                   {initials(user?.name) || 'U'}
                 </div>
                 <span className="hidden text-sm font-medium sm:block">{user?.name}</span>
@@ -256,21 +246,21 @@ const AppLayout = () => {
               {userMenuOpen && (
                 <div
                   onMouseLeave={() => setUserMenuOpen(false)}
-                  className="absolute right-0 z-20 mt-2 w-52 animate-scale-in rounded-xl border border-gray-100 bg-white py-1.5 shadow-popover dark:border-gray-800 dark:bg-gray-900"
+                  className="glass-modal absolute right-0 z-20 mt-2 w-52 animate-scale-in rounded-2xl py-1.5"
                 >
-                  <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+                  <div className="border-b border-white/30 px-3 py-2 dark:border-white/10">
                     <p className="text-sm font-medium">{user?.name}</p>
                     <p className="text-xs capitalize text-gray-400">{user?.role}</p>
                   </div>
                   <button
                     onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-600 hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5"
                   >
                     <SettingsIcon size={15} /> Settings
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50/60 dark:hover:bg-red-950/30"
                   >
                     <LogOut size={15} /> Logout
                   </button>
@@ -280,11 +270,16 @@ const AppLayout = () => {
           </div>
         </header>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="route-transition">
-          <Outlet />
-        </div>
-      </main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="route-transition">
+            <Outlet />
+          </div>
+        </main>
+
+        {/* NEW — lightweight glass footer, purely presentational */}
+        <footer className="glass-nav border-t px-4 py-2 text-center text-[11px] text-gray-400 sm:px-6">
+          {gymName} · Powered by Gym ERP
+        </footer>
       </div>
     </div>
   );
