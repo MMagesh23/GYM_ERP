@@ -66,7 +66,7 @@ const SettingsPage = () => {
 
   if (!settings) return <div className="p-6 text-sm text-gray-400">Loading settings...</div>;
 
-  const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800';
+  const inputClass = 'glass-input';
   const labelClass = 'mb-1 block text-sm font-medium';
 
   return (
@@ -74,7 +74,7 @@ const SettingsPage = () => {
       <h1 className="mb-1 text-xl font-semibold">Settings</h1>
       <p className="mb-6 text-sm text-gray-500">Customize your gym's identity, invoicing, roles, and system behavior.</p>
 
-      <div className="mb-5 flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-800">
+      <div className="mb-5 flex flex-wrap gap-1 border-b border-white/30 dark:border-white/10">
         {TABS.map((t) => (
           <button
             key={t}
