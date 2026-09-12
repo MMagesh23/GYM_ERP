@@ -129,7 +129,7 @@ const RolesPanel = () => {
                 onClick={() => selectRole(r)}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                   selectedId === r._id
-                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+                    ? 'glass-pill-active text-brand-700 dark:text-brand-300'
                     : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
@@ -177,7 +177,7 @@ const RolesPanel = () => {
 
             <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-800/50">
+                <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
                   <tr>
                     <th className="px-3 py-2">Module</th>
                     {ACTIONS.map((a) => (
@@ -186,7 +186,7 @@ const RolesPanel = () => {
                     <th className="px-2 py-2 text-center">All</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody className="divide-y divide-white/20 dark:divide-white/5">
                   {draft.permissions.map((p) => {
                     const allOn = ACTIONS.every((a) => p.actions[a]);
                     return (
