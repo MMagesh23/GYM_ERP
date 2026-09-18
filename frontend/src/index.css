@@ -315,3 +315,227 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     min-width: 40px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIQUID GLASS — ROUND 3: CORRECTNESS & PERFORMANCE FIXES
+   Append AFTER rounds 1 and 2 in frontend/src/index.css.
+   This block intentionally OVERRIDES a few round-1 rules; keep it last.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 1 — The global transition rule was fighting the glass layer.
+   index.css has: * { transition-property: ...transform...; }
+   Applying a transform transition to EVERY element means each blurred
+   surface re-composites on any class change, and it silently animates
+   transforms on elements that were never meant to move (dropdown
+   positioning, chart internals, Recharts SVG nodes). Narrowing it to
+   color/shadow only removes the jank without losing the polish; things
+   that genuinely move opt in via their own `transition` utility.
+   ───────────────────────────────────────────────────────────────────── */
+* {
+  transition-property: background-color, border-color, color, box-shadow;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 2 — Nested glass reads as mud.
+   backdrop-filter does NOT stack: a child blurs the already-composited
+   parent, so a .glass-panel inside .glass-modal or inside another
+   .glass-panel comes out flat, muddy and low-contrast. Any glass surface
+   nested inside another one drops its own blur and uses a plain tint
+   instead. Nothing needs re-classing — this matches on nesting alone.
+   ───────────────────────────────────────────────────────────────────── */
+.glass-panel .glass-panel,
+.glass-panel .glass-table,
+.glass-modal .glass-panel,
+.glass-modal .glass-table,
+.glass-nav .glass-panel,
+.glass-table .glass-panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.40);
+  box-shadow: none;
+}
+.dark .glass-panel .glass-panel,
+.dark .glass-panel .glass-table,
+.dark .glass-modal .glass-panel,
+.dark .glass-modal .glass-table,
+.dark .glass-nav .glass-panel,
+.dark .glass-table .glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Inputs inside a glass surface: same problem, same treatment. */
+.glass-panel .glass-input,
+.glass-modal .glass-input,
+.glass-nav .glass-input {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 3 — Containment escape hatch.
+   Because backdrop-filter creates a containing block for fixed children,
+   ANY glass ancestor can trap a fixed overlay. Modal.jsx now portals to
+   <body> so it's immune, but this utility is here for anything else that
+   must break out (future popovers, date pickers, tooltips).
+   Put `glass-isolate` on the overlay itself.
+   ───────────────────────────────────────────────────────────────────── */
+.glass-isolate {
+  isolation: isolate;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 4 — Text contrast on translucent surfaces.
+   gray-400 on a 55%-opaque panel over a gradient lands well under the
+   4.5:1 WCAG AA threshold, and it shifts as the backdrop changes. These
+   nudge the muted text ramps up just enough to stay legible on glass
+   without turning every caption into body-weight text.
+   ───────────────────────────────────────────────────────────────────── */
+.glass-panel .text-gray-400,
+.glass-table .text-gray-400,
+.glass-modal .text-gray-400,
+.glass-nav .text-gray-400 {
+  @apply text-gray-500 dark:text-gray-400;
+}
+.glass-panel .text-gray-500,
+.glass-table .text-gray-500,
+.glass-modal .text-gray-500,
+.glass-nav .text-gray-500 {
+  @apply text-gray-600 dark:text-gray-300;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 5 — Scroll performance on long tables.
+   A backdrop-filter surface repaints its whole backdrop region on every
+   scroll frame. With 20–100 member/payment rows plus the two large
+   blurred blobs behind them, mid-range laptops and most phones drop
+   frames. Three mitigations:
+     a) promote the backdrop to its own layer and stop it repainting
+     b) contain paint within table surfaces
+     c) drop the ambient blobs entirely on small screens, where they're
+        mostly hidden behind content anyway
+   ───────────────────────────────────────────────────────────────────── */
+.liquid-backdrop {
+  will-change: transform;
+  transform: translateZ(0);
+  contain: strict;
+}
+
+.glass-table {
+  contain: paint;
+}
+
+@media (max-width: 640px) {
+  .liquid-backdrop::before,
+  .liquid-backdrop::after {
+    display: none;
+  }
+  /* Cheaper blur on mobile — visually near-identical at these sizes. */
+  .glass-panel,
+  .glass-table {
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 6 — Sticky table headers couldn't work.
+   .glass-table sets `overflow: hidden` (needed to clip rows to the
+   rounded corners), and `position: sticky` has no scroll container to
+   stick to inside it. The header just scrolled away. Wrapping the table
+   in `.table-scroll` gives sticky a real scrollport while the rounded
+   clip stays on the outer surface.
+   Usage:  <div class="glass-table">
+             <div class="table-scroll"> <table>…</table> </div>
+           </div>
+   ───────────────────────────────────────────────────────────────────── */
+.table-scroll {
+  max-height: min(65vh, 640px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(8px);
+}
+.dark .table-scroll thead th {
+  background: rgba(23, 27, 38, 0.92);
+}
+
+/* Horizontal scroll hint for wide tables on mobile — several tables here
+   have 6–8 columns and silently cut off on a phone with no indication. */
+.table-scroll::-webkit-scrollbar { height: 8px; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 7 — Dropdowns clipped by glass containers.
+   Any select/menu rendered inside `.glass-table` (which now has
+   contain: paint) gets clipped. Native <select> is unaffected, but
+   custom absolute-positioned menus are. Mark their wrapper with this.
+   ───────────────────────────────────────────────────────────────────── */
+.allow-overflow {
+  contain: none !important;
+  overflow: visible !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 8 — Disabled/readonly state was invisible on glass.
+   .input's disabled style used bg-gray-100, which on a translucent panel
+   is barely distinguishable from the enabled state.
+   ───────────────────────────────────────────────────────────────────── */
+.glass-input:disabled,
+.glass-input[readonly] {
+  background: rgba(120, 130, 150, 0.14);
+  color: rgb(107 114 128);
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.dark .glass-input:disabled,
+.dark .glass-input[readonly] {
+  background: rgba(255, 255, 255, 0.03);
+  color: rgb(156 163 175);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 9 — Print. Blur and translucency destroy printed invoices/reports,
+   which staff do print from this app. Flatten everything for print.
+   ───────────────────────────────────────────────────────────────────── */
+@media print {
+  .liquid-backdrop,
+  aside,
+  header,
+  footer {
+    display: none !important;
+  }
+  .glass-panel,
+  .glass-table,
+  .glass-modal,
+  .glass-nav,
+  .glass-thead {
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .table-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FIX 10 — Forced-colors / high-contrast mode (Windows). Glass borders
+   vanish entirely there, leaving panels with no visible edges.
+   ───────────────────────────────────────────────────────────────────── */
+@media (forced-colors: active) {
+  .glass-panel,
+  .glass-table,
+  .glass-modal,
+  .glass-nav {
+    border: 1px solid CanvasText;
+    backdrop-filter: none;
+  }
+}
