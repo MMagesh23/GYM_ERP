@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ══════════════════════════════════════════════════════════════════════
+   1. DESIGN TOKENS
+   ══════════════════════════════════════════════════════════════════════ */
+
 :root {
+  /* Brand ramp — overwritten at runtime by utils/branding.js#applyBrandTheme
+     from Settings.brandColor, so these are only the boot defaults. */
   --brand-50: #eef7ff;
   --brand-100: #d9edff;
   --brand-200: #bce0ff;
@@ -14,29 +20,111 @@
   --brand-800: #1949b2;
   --brand-900: #1a418c;
   --accent-color: #10b981;
+
+  /* Liquid glass surface tokens */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.45);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 8px 32px rgba(31, 41, 55, 0.10), 0 1.5px 4px rgba(31, 41, 55, 0.06);
 }
+
+.dark {
+  --glass-bg: rgba(23, 27, 38, 0.55);
+  --glass-bg-strong: rgba(23, 27, 38, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1.5px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2. BASE
+   ══════════════════════════════════════════════════════════════════════ */
 
 html, body, #root { height: 100%; }
 body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 
-* { transition-property: background-color, border-color, color, box-shadow, transform, opacity; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+/* NOTE: `transform` is deliberately NOT in this list. Including it meant
+   every element in the app animated transforms on any class change, which
+   forced each backdrop-filter surface to re-composite and silently animated
+   things that were never meant to move (dropdown positioning, Recharts SVG
+   nodes). Elements that genuinely move opt in with their own `transition`
+   utility class instead. */
+* {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-700 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-600; }
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 150, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(120, 130, 150, 0.55); }
 
-:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
+/* A plain 2px outline can vanish against blurred low-contrast glass, so the
+   focus ring carries a halo as well. */
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 4px rgba(51, 144, 250, 0.18);
+}
 
-/* ── Shared component classes ──────────────────────────────────────────
-   NEW: previously every form/modal in the app hand-rolled its own
-   `inputClass`/`labelClass`/button className strings (20+ near-identical
-   copies across Modals). Centralizing them here means: (a) one place to
-   fix a11y/contrast/error states, (b) new screens get consistency for
-   free, (c) existing screens can migrate incrementally by swapping their
-   local `inputClass` variable to `'input'` — no JSX restructuring needed.
-*/
+/* ══════════════════════════════════════════════════════════════════════
+   3. AMBIENT BACKDROP
+   Gives the blur something soft and colourful to refract. Fixed, behind
+   everything, pointer-events: none — it can never intercept clicks.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.liquid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Promote to its own layer so it never repaints during page scroll. */
+  will-change: transform;
+  transform: translateZ(0);
+  contain: strict;
+}
+
+.liquid-backdrop::before,
+.liquid-backdrop::after {
+  content: '';
+  position: absolute;
+  width: 42vw;
+  height: 42vw;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.35;
+}
+
+.liquid-backdrop::before {
+  top: -12%;
+  left: -8%;
+  background: radial-gradient(circle, var(--brand-400) 0%, transparent 70%);
+}
+
+.liquid-backdrop::after {
+  bottom: -14%;
+  right: -6%;
+  background: radial-gradient(circle, var(--accent-color) 0%, transparent 70%);
+}
+
+.dark .liquid-backdrop::before,
+.dark .liquid-backdrop::after { opacity: 0.18; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   4. COMPONENT CLASSES
+   ══════════════════════════════════════════════════════════════════════ */
+
 @layer components {
+
+  /* ── Forms ──────────────────────────────────────────────────────── */
+
   .label {
     @apply mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300;
   }
@@ -54,13 +142,21 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     @apply border-red-400 focus:border-red-500 focus:ring-red-500;
   }
 
-  .field-error {
-    @apply mt-1 text-xs text-red-500;
-  }
+  .field-error { @apply mt-1 text-xs text-red-500; }
+  .field-hint  { @apply mt-1 text-xs text-gray-400; }
 
-  .field-hint {
-    @apply mt-1 text-xs text-gray-400;
+  /* Frosted input for use on glass surfaces. */
+  .glass-input {
+    @apply w-full rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400
+           focus:outline-none focus:ring-1 focus:ring-brand-500
+           dark:text-gray-100 dark:placeholder:text-gray-500;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(8px);
   }
+  .dark .glass-input { background: rgba(255, 255, 255, 0.04); }
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
 
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
@@ -85,9 +181,23 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     @apply btn text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800;
   }
 
-  .btn-sm {
-    @apply px-2.5 py-1.5 text-xs;
+  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+
+  .btn-primary-glass {
+    @apply btn text-white shadow-sm active:scale-[0.98];
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
   }
+
+  .btn-secondary-glass {
+    @apply btn text-gray-700 dark:text-gray-200;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+  }
+
+  /* ── Legacy solid cards (kept so nothing that still uses them breaks) ── */
 
   .card {
     @apply rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-gray-900;
@@ -96,114 +206,85 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   .card-hoverable {
     @apply card transition hover:shadow-card-hover hover:-translate-y-0.5;
   }
-}
 
-.card-lift {
-  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card-lift:hover { transform: translateY(-2px); }
+  /* ── Glass surfaces ─────────────────────────────────────────────── */
 
-.skeleton {
-  border-radius: 0.375rem;
-  background-image: linear-gradient(90deg, #e5e7eb 0px, #f3f4f6 40px, #e5e7eb 80px);
-  background-size: 400px 100%;
-  animation: skeleton-shimmer 1.6s ease-in-out infinite;
-}
-.dark .skeleton {
-  background-image: linear-gradient(90deg, #1f2937 0px, #374151 40px, #1f2937 80px);
-  background-size: 400px 100%;
-}
-@keyframes skeleton-shimmer {
-  0% { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-@keyframes settleIn {
-  0% { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.animate-settle-in { animation: settleIn 220ms cubic-bezier(0.4, 0, 0.2, 1); }
-
-/* NEW: gives every route a soft settle-in instead of an abrupt swap when
-   navigating via React Router — cheap perceived-performance win. */
-@keyframes routeIn {
-  0% { opacity: 0; transform: translateY(6px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.route-transition { animation: routeIn 180ms cubic-bezier(0.4, 0, 0.2, 1); }
-
-/* NEW: consistent empty/zero-state number so "no data" and "0" read
-   differently at a glance across StatCards. */
-.stat-value-empty {
-  @apply text-gray-300 dark:text-gray-700;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   LIQUID GLASS — ROUND 2: UX POLISH
-   ══════════════════════════════════════════════════════════════════════ */
-
-/* ── Accessibility: honor the OS "reduce motion" setting ──────────────
-   The round-1 blurs, lifts and slide-ins can trigger motion sickness and
-   vestibular discomfort. This kills animation/transform without removing
-   any visual state, so nothing becomes ambiguous. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  .card-lift:hover,
-  .glass-panel:hover,
-  .hover\:-translate-y-0\.5:hover {
-    transform: none !important;
-  }
-}
-
-/* ── Focus visibility on glass ────────────────────────────────────────
-   A 2px outline alone can disappear against a blurred, low-contrast
-   surface. The extra halo guarantees the focus ring is visible on both
-   light and dark glass. */
-:focus-visible {
-  outline: 2px solid var(--brand-500);
-  outline-offset: 2px;
-  border-radius: 0.5rem;
-  box-shadow: 0 0 0 4px rgba(51, 144, 250, 0.18);
-}
-
-/* ── Bell nudge when unread notifications exist ───────────────────────
-   Runs a few times then stops, so it draws the eye without becoming a
-   permanently distracting animation in the corner of the screen. */
-@keyframes bellNudge {
-  0%, 60%, 100% { transform: rotate(0deg); }
-  70% { transform: rotate(-12deg); }
-  80% { transform: rotate(10deg); }
-  90% { transform: rotate(-6deg); }
-}
-.animate-bell-nudge {
-  animation: bellNudge 2.4s ease-in-out 3;
-  transform-origin: top center;
-}
-
-@layer components {
-  /* ── Sticky table headers ──────────────────────────────────────────
-     Long member/payment lists lose their column meaning once you scroll.
-     Pair with a max-height wrapper on the table container.
-     Usage: add `glass-thead-sticky` alongside `glass-thead` on <thead>. */
-  .glass-thead-sticky {
-    position: sticky;
-    top: 0;
-    z-index: 5;
+  .glass-panel {
+    @apply relative rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
 
-  /* ── Row affordance ────────────────────────────────────────────────
-     Clickable rows now show a left accent on hover so it's obvious the
-     whole row is interactive, not just the linked cell. */
-  .row-interactive {
-    @apply relative transition-colors;
+  /* Hairline top-left highlight, the way light catches a real glass edge. */
+  .glass-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-highlight), transparent 40%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
   }
+
+  .glass-table {
+    @apply relative overflow-hidden rounded-xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    /* Keeps long row lists from repainting the whole backdrop on scroll. */
+    contain: paint;
+  }
+
+  /* Stronger, more opaque glass for surfaces that sit above scrolling
+     content and must stay legible: sidebar, header, modals, dropdowns. */
+  .glass-nav {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  .glass-modal {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+  }
+
+  .glass-thead {
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+  }
+  .dark .glass-thead { background: rgba(255, 255, 255, 0.03); }
+
+  .glass-pill-active {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 2px 10px rgba(29, 113, 239, 0.18);
+    backdrop-filter: blur(10px);
+  }
+
+  .glass-toast {
+    background: var(--glass-bg-strong) !important;
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px) saturate(180%);
+    color: inherit;
+  }
+
+  /* ── Interaction helpers ────────────────────────────────────────── */
+
+  /* Left accent on hover, so it's clear the whole row is clickable and
+     not just the one linked cell. */
+  .row-interactive { @apply relative transition-colors; }
   .row-interactive::before {
     content: '';
     position: absolute;
@@ -217,9 +298,7 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   }
   .row-interactive:hover::before { opacity: 1; }
 
-  /* ── Segmented control (Settings tabs, Payments tabs) ──────────────
-     Replaces the underline-tab pattern with a frosted segment group that
-     matches the rest of the glass language. */
+  /* Segmented control — frosted alternative to the underline tab bar. */
   .segment-group {
     @apply inline-flex gap-1 rounded-xl p-1;
     background: var(--glass-bg);
@@ -236,114 +315,38 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     box-shadow: 0 1px 6px rgba(31, 41, 55, 0.10);
   }
 
-  /* ── Numeric emphasis ──────────────────────────────────────────────
-     Currency/count figures line up correctly across rows instead of
-     jittering with proportional digits. */
-  .num {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
-  }
-
-  /* ── Toast surface to match the glass language ─────────────────────
-     react-hot-toast is already given `!rounded-xl !shadow-popover` in
-     App.jsx; this upgrades the fill without touching that config. */
-  .glass-toast {
-    background: var(--glass-bg-strong) !important;
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(20px) saturate(180%);
-    color: inherit;
-  }
-
-  /* ── Skeleton on glass ─────────────────────────────────────────────
-     The round-1 skeleton used opaque grays that punched a solid hole in
-     a translucent card. This version shimmers translucently instead. */
-  .skeleton-glass {
-    border-radius: 0.5rem;
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      rgba(255, 255, 255, 0.55) 50%,
-      rgba(255, 255, 255, 0.25) 100%
-    );
-    background-size: 300% 100%;
-    animation: skeleton-shimmer 1.6s ease-in-out infinite;
-  }
-  .dark .skeleton-glass {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.04) 0%,
-      rgba(255, 255, 255, 0.10) 50%,
-      rgba(255, 255, 255, 0.04) 100%
-    );
-    background-size: 300% 100%;
-  }
-
-  /* ── Scroll-fade hint ──────────────────────────────────────────────
-     Soft fade at the bottom of a scrollable panel so users can tell more
-     content exists below the fold. */
-  .scroll-fade {
-    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
-  }
-
-  /* ── Empty-state illustration plate ────────────────────────────────*/
   .empty-plate {
     @apply flex h-16 w-16 items-center justify-center rounded-2xl;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(10px);
   }
-}
 
-/* ── Scrollbars tuned for translucent surfaces ────────────────────────*/
-::-webkit-scrollbar-thumb {
-  background: rgba(120, 130, 150, 0.35);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 130, 150, 0.55);
-}
-
-/* ── Mobile tap targets ───────────────────────────────────────────────
-   Icon-only buttons in table action columns were ~28px, below the 44px
-   recommended touch target. Bumps them on coarse pointers only, so the
-   desktop density is untouched. */
-@media (pointer: coarse) {
-  button[aria-label],
-  button[title] {
-    min-height: 40px;
-    min-width: 40px;
+  /* Currency and count figures line up across rows instead of jittering. */
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
+
+  .scroll-fade {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  }
+
+  /* Distinguishes "no data" from a real 0 on StatCards. */
+  .stat-value-empty { @apply text-gray-300 dark:text-gray-700; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   LIQUID GLASS — ROUND 3: CORRECTNESS & PERFORMANCE FIXES
-   Append AFTER rounds 1 and 2 in frontend/src/index.css.
-   This block intentionally OVERRIDES a few round-1 rules; keep it last.
+   5. GLASS CORRECTNESS RULES
+   These sit outside @layer on purpose so they win over the component
+   definitions above without needing !important.
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 1 — The global transition rule was fighting the glass layer.
-   index.css has: * { transition-property: ...transform...; }
-   Applying a transform transition to EVERY element means each blurred
-   surface re-composites on any class change, and it silently animates
-   transforms on elements that were never meant to move (dropdown
-   positioning, chart internals, Recharts SVG nodes). Narrowing it to
-   color/shadow only removes the jank without losing the polish; things
-   that genuinely move opt in via their own `transition` utility.
-   ───────────────────────────────────────────────────────────────────── */
-* {
-  transition-property: background-color, border-color, color, box-shadow;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 2 — Nested glass reads as mud.
-   backdrop-filter does NOT stack: a child blurs the already-composited
-   parent, so a .glass-panel inside .glass-modal or inside another
-   .glass-panel comes out flat, muddy and low-contrast. Any glass surface
-   nested inside another one drops its own blur and uses a plain tint
-   instead. Nothing needs re-classing — this matches on nesting alone.
-   ───────────────────────────────────────────────────────────────────── */
+/* backdrop-filter does NOT stack — a child blurs the already-composited
+   parent, so glass inside glass comes out flat and muddy. Nested surfaces
+   drop their own blur and fall back to a plain tint. Matches on nesting
+   alone, so no component needs re-classing. */
 .glass-panel .glass-panel,
 .glass-panel .glass-table,
 .glass-modal .glass-panel,
@@ -364,7 +367,6 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   background: rgba(255, 255, 255, 0.05);
 }
 
-/* Inputs inside a glass surface: same problem, same treatment. */
 .glass-panel .glass-input,
 .glass-modal .glass-input,
 .glass-nav .glass-input {
@@ -372,25 +374,8 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   -webkit-backdrop-filter: none;
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 3 — Containment escape hatch.
-   Because backdrop-filter creates a containing block for fixed children,
-   ANY glass ancestor can trap a fixed overlay. Modal.jsx now portals to
-   <body> so it's immune, but this utility is here for anything else that
-   must break out (future popovers, date pickers, tooltips).
-   Put `glass-isolate` on the overlay itself.
-   ───────────────────────────────────────────────────────────────────── */
-.glass-isolate {
-  isolation: isolate;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 4 — Text contrast on translucent surfaces.
-   gray-400 on a 55%-opaque panel over a gradient lands well under the
-   4.5:1 WCAG AA threshold, and it shifts as the backdrop changes. These
-   nudge the muted text ramps up just enough to stay legible on glass
-   without turning every caption into body-weight text.
-   ───────────────────────────────────────────────────────────────────── */
+/* Muted text ramps shift up one step on glass: gray-400 over a 55%-opaque
+   panel lands under the 4.5:1 AA threshold and drifts as the backdrop moves. */
 .glass-panel .text-gray-400,
 .glass-table .text-gray-400,
 .glass-modal .text-gray-400,
@@ -404,87 +389,7 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   @apply text-gray-600 dark:text-gray-300;
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 5 — Scroll performance on long tables.
-   A backdrop-filter surface repaints its whole backdrop region on every
-   scroll frame. With 20–100 member/payment rows plus the two large
-   blurred blobs behind them, mid-range laptops and most phones drop
-   frames. Three mitigations:
-     a) promote the backdrop to its own layer and stop it repainting
-     b) contain paint within table surfaces
-     c) drop the ambient blobs entirely on small screens, where they're
-        mostly hidden behind content anyway
-   ───────────────────────────────────────────────────────────────────── */
-.liquid-backdrop {
-  will-change: transform;
-  transform: translateZ(0);
-  contain: strict;
-}
-
-.glass-table {
-  contain: paint;
-}
-
-@media (max-width: 640px) {
-  .liquid-backdrop::before,
-  .liquid-backdrop::after {
-    display: none;
-  }
-  /* Cheaper blur on mobile — visually near-identical at these sizes. */
-  .glass-panel,
-  .glass-table {
-    backdrop-filter: blur(12px) saturate(150%);
-    -webkit-backdrop-filter: blur(12px) saturate(150%);
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 6 — Sticky table headers couldn't work.
-   .glass-table sets `overflow: hidden` (needed to clip rows to the
-   rounded corners), and `position: sticky` has no scroll container to
-   stick to inside it. The header just scrolled away. Wrapping the table
-   in `.table-scroll` gives sticky a real scrollport while the rounded
-   clip stays on the outer surface.
-   Usage:  <div class="glass-table">
-             <div class="table-scroll"> <table>…</table> </div>
-           </div>
-   ───────────────────────────────────────────────────────────────────── */
-.table-scroll {
-  max-height: min(65vh, 640px);
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.table-scroll thead th {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: rgba(248, 250, 252, 0.92);
-  backdrop-filter: blur(8px);
-}
-.dark .table-scroll thead th {
-  background: rgba(23, 27, 38, 0.92);
-}
-
-/* Horizontal scroll hint for wide tables on mobile — several tables here
-   have 6–8 columns and silently cut off on a phone with no indication. */
-.table-scroll::-webkit-scrollbar { height: 8px; }
-
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 7 — Dropdowns clipped by glass containers.
-   Any select/menu rendered inside `.glass-table` (which now has
-   contain: paint) gets clipped. Native <select> is unaffected, but
-   custom absolute-positioned menus are. Mark their wrapper with this.
-   ───────────────────────────────────────────────────────────────────── */
-.allow-overflow {
-  contain: none !important;
-  overflow: visible !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 8 — Disabled/readonly state was invisible on glass.
-   .input's disabled style used bg-gray-100, which on a translucent panel
-   is barely distinguishable from the enabled state.
-   ───────────────────────────────────────────────────────────────────── */
+/* Disabled state was nearly invisible on translucent surfaces. */
 .glass-input:disabled,
 .glass-input[readonly] {
   background: rgba(120, 130, 150, 0.14);
@@ -498,17 +403,170 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   color: rgb(156 163 175);
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 9 — Print. Blur and translucency destroy printed invoices/reports,
-   which staff do print from this app. Flatten everything for print.
-   ───────────────────────────────────────────────────────────────────── */
+/* backdrop-filter makes an element a containing block for `position: fixed`
+   descendants, so any glass ancestor can trap a fixed overlay. Modal.jsx
+   portals to <body> and is immune; this is the escape hatch for anything
+   else that must break out (popovers, date pickers, tooltips). */
+.glass-isolate { isolation: isolate; }
+
+/* For custom absolute-positioned menus that would otherwise be clipped by
+   a `contain: paint` glass container. */
+.allow-overflow {
+  contain: none !important;
+  overflow: visible !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6. TABLES
+   .glass-table needs overflow: hidden to clip rows to its rounded corners,
+   which leaves `position: sticky` with no scrollport. This inner wrapper
+   provides one while the rounded clip stays on the outer surface.
+     <div class="glass-table">
+       <div class="table-scroll"> <table>…</table> </div>
+     </div>
+   ══════════════════════════════════════════════════════════════════════ */
+
+.table-scroll {
+  max-height: min(65vh, 640px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(8px);
+}
+.dark .table-scroll thead th { background: rgba(23, 27, 38, 0.92); }
+
+.table-scroll::-webkit-scrollbar { height: 8px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   7. ANIMATION
+   ══════════════════════════════════════════════════════════════════════ */
+
+.card-lift {
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-lift:hover { transform: translateY(-2px); }
+
+.skeleton {
+  border-radius: 0.375rem;
+  background-image: linear-gradient(90deg, #e5e7eb 0px, #f3f4f6 40px, #e5e7eb 80px);
+  background-size: 400px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+.dark .skeleton {
+  background-image: linear-gradient(90deg, #1f2937 0px, #374151 40px, #1f2937 80px);
+  background-size: 400px 100%;
+}
+
+/* Translucent variant — the opaque .skeleton punches a solid hole in a
+   glass card while loading. */
+.skeleton-glass {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  background-size: 300% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+.dark .skeleton-glass {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 300% 100%;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes settleIn {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-settle-in { animation: settleIn 220ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+@keyframes routeIn {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.route-transition { animation: routeIn 180ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Runs a few times then stops — draws the eye without becoming a permanent
+   distraction in the corner of the screen. */
+@keyframes bellNudge {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  70% { transform: rotate(-12deg); }
+  80% { transform: rotate(10deg); }
+  90% { transform: rotate(-6deg); }
+}
+.animate-bell-nudge {
+  animation: bellNudge 2.4s ease-in-out 3;
+  transform-origin: top center;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   8. RESPONSIVE & ENVIRONMENT ADAPTATIONS
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Mobile: drop the ambient blobs (mostly hidden behind content anyway) and
+   use a cheaper blur radius — visually near-identical at these sizes. */
+@media (max-width: 640px) {
+  .liquid-backdrop::before,
+  .liquid-backdrop::after { display: none; }
+
+  .glass-panel,
+  .glass-table {
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+  }
+}
+
+/* Icon-only buttons in table action columns were ~28px, below the 44px
+   touch-target guidance. Coarse pointers only, so desktop density is
+   untouched. */
+@media (pointer: coarse) {
+  button[aria-label],
+  button[title] {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* Blur, lift and slide-in can trigger vestibular discomfort. This removes
+   motion without removing any visual state, so nothing becomes ambiguous. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .card-lift:hover,
+  .glass-panel:hover { transform: none !important; }
+}
+
+/* Staff print invoices and reports from this app; translucency destroys
+   printed output. */
 @media print {
   .liquid-backdrop,
   aside,
   header,
-  footer {
-    display: none !important;
-  }
+  footer { display: none !important; }
+
   .glass-panel,
   .glass-table,
   .glass-modal,
@@ -520,16 +578,15 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+
   .table-scroll {
     max-height: none !important;
     overflow: visible !important;
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   FIX 10 — Forced-colors / high-contrast mode (Windows). Glass borders
-   vanish entirely there, leaving panels with no visible edges.
-   ───────────────────────────────────────────────────────────────────── */
+/* Windows high-contrast mode strips glass borders entirely, leaving panels
+   with no visible edges. */
 @media (forced-colors: active) {
   .glass-panel,
   .glass-table,
@@ -537,5 +594,26 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   .glass-nav {
     border: 1px solid CanvasText;
     backdrop-filter: none;
+  }
+}
+
+/* Older Safari/Firefox without backdrop-filter: every glass surface falls
+   back to solid so nothing goes unreadable or invisible. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel,
+  .glass-table,
+  .glass-nav,
+  .glass-modal,
+  .glass-thead,
+  .glass-input {
+    background: rgba(255, 255, 255, 0.92) !important;
+  }
+  .dark .glass-panel,
+  .dark .glass-table,
+  .dark .glass-nav,
+  .dark .glass-modal,
+  .dark .glass-thead,
+  .dark .glass-input {
+    background: rgba(23, 27, 38, 0.92) !important;
   }
 }
