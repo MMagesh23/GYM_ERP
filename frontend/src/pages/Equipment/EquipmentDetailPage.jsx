@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, CheckCircle, AlertCircle } from 'lucide-react';
+import EmptyState from '../../components/common/EmptyState';
 import { equipmentApi, maintenanceApi } from '../../services/equipmentApi';
 import Badge from '../../components/common/Badge';
 import MaintenanceFormModal from './MaintenanceFormModal';
@@ -10,15 +11,20 @@ const EquipmentDetailPage = () => {
   const { id } = useParams();
   const [equipment, setEquipment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
+    setEquipment(null);
     try {
       const { data } = await equipmentApi.get(id);
       setEquipment(data.data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load equipment');
+      const message = err.response?.data?.message || 'Failed to load equipment';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -38,10 +44,29 @@ const EquipmentDetailPage = () => {
     }
   };
 
-  if (loading || !equipment) return <div className="p-6 text-sm text-gray-400">Loading...</div>;
+  if (loading) return <div className="p-4 text-sm text-gray-500 sm:p-6" role="status">Loading equipment...</div>;
+
+  if (!equipment) {
+    return (
+      <div className="p-4 sm:p-6">
+        <EmptyState
+          icon={AlertCircle}
+          title={loadError ? "Couldn't load equipment" : 'Equipment not found'}
+          description={loadError || 'This equipment record may have been removed or the link may be incorrect.'}
+          action={
+            loadError ? (
+              <button type="button" onClick={load} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>
+            ) : (
+              <Link to="/equipment" className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Back to equipment</Link>
+            )
+          }
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link to="/equipment" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
         <ArrowLeft size={16} /> Back to equipment
       </Link>
@@ -81,7 +106,7 @@ const EquipmentDetailPage = () => {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <table className="w-full text-left text-sm">
+        <div className="table-scroll"><table className="min-w-[760px] w-full text-left text-sm">
           <thead className="glass-thead border-b border-white/30 text-xs uppercase text-gray-500 dark:border-white/10">
             <tr>
               <th className="px-4 py-3">Type</th>
@@ -124,7 +149,7 @@ const EquipmentDetailPage = () => {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <MaintenanceFormModal open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} equipmentId={id} />
