@@ -33,15 +33,27 @@ const SettingsPage = () => {
   const [logoPreview, setLogoPreview] = useState(null);
   const [roleCount, setRoleCount] = useState(null);
   const [staffCount, setStaffCount] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const dispatch = useDispatch();
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm();
 
   const load = async () => {
-    const { data } = await settingsApi.get();
-    const nextSettings = data.data;
-    setSettings(nextSettings);
-    reset(nextSettings);
-    dispatch(setSettingsStore(nextSettings));
+    setLoading(true);
+    setLoadError('');
+    try {
+      const { data } = await settingsApi.get();
+      const nextSettings = data.data;
+      setSettings(nextSettings);
+      reset(nextSettings);
+      dispatch(setSettingsStore(nextSettings));
+    } catch (err) {
+      const message = err.response?.data?.message || 'Could not load settings. Check your connection and try again.';
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -64,13 +76,39 @@ const SettingsPage = () => {
     }
   };
 
-  if (!settings) return <div className="p-6 text-sm text-gray-400">Loading settings...</div>;
+  if (!settings) {
+    return (
+      <div className="p-6">
+        {loading ? (
+          <p className="text-sm text-gray-500" role="status">Loading settings...</p>
+        ) : (
+          <div className="max-w-lg rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+            <p className="text-sm font-medium text-red-700 dark:text-red-300" role="alert">
+              {loadError || 'Settings could not be loaded.'}
+            </p>
+            <button
+              type="button"
+              onClick={load}
+              className="mt-3 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const inputClass = 'glass-input';
   const labelClass = 'mb-1 block text-sm font-medium';
 
   return (
     <div className="p-6">
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300" role="status">
+          Settings were saved or loaded previously, but the latest refresh failed: {loadError}
+        </div>
+      )}
       <h1 className="mb-1 text-xl font-semibold">Settings</h1>
       <p className="mb-6 text-sm text-gray-500">Customize your gym's identity, invoicing, roles, and system behavior.</p>
 
