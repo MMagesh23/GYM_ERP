@@ -56,6 +56,13 @@ const PaymentsPage = () => {
     setSearchParams(next === 'dues' ? { tab: 'dues' } : {}, { replace: true });
   };
 
+  // Keep the selected view in sync with URL changes (including browser
+  // back/forward and links opened while this route is already mounted).
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab') === 'dues' ? 'dues' : 'payments';
+    setTab((current) => (current === requestedTab ? current : requestedTab));
+  }, [searchParams]);
+
   const fetchDues = useCallback(async () => {
     setDuesLoading(true);
     try {
@@ -130,8 +137,11 @@ const PaymentsPage = () => {
         }
       />
 
-      <div className="mb-5 flex gap-1 border-b border-white/30 dark:border-white/10">
+      <div className="mb-5 flex gap-1 border-b border-white/30 dark:border-white/10" role="tablist" aria-label="Payment views">
         <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'payments'}
           onClick={() => switchTab('payments')}
           className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === 'payments' ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
@@ -140,6 +150,9 @@ const PaymentsPage = () => {
           All Payments
         </button>
         <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'dues'}
           onClick={() => switchTab('dues')}
           className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === 'dues' ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
@@ -224,7 +237,7 @@ const PaymentsPage = () => {
             }
           />
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="table-scroll"><table className="min-w-[760px] w-full text-left text-sm">
             <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
               <tr>
                 <th className="px-4 py-3">Invoice #</th>
@@ -298,7 +311,7 @@ const PaymentsPage = () => {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
         {!loading && payments.length > 0 && (
           <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={fetchPayments} />
