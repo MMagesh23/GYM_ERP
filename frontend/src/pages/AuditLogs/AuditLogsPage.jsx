@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { auditLogApi } from '../../services/reportApi';
 import PaginationComp from '../../components/common/Pagination';
 import PageHeader from '../../components/common/PageHeader';
@@ -27,16 +27,20 @@ const AuditLogsPage = () => {
   const [action, setAction] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const fetchLogs = useCallback(
     async (page = 1) => {
       setLoading(true);
+      setLoadError('');
       try {
         const { data } = await auditLogApi.list({ page, limit: 30, action: action || undefined, module: moduleFilter || undefined });
         setLogs(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load audit logs');
+        const message = err.response?.data?.message || 'Failed to load audit logs';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -84,6 +88,13 @@ const AuditLogsPage = () => {
       <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={10} cols={6} />
+        ) : loadError ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="Couldn't load audit logs"
+            description={loadError}
+            action={<button type="button" onClick={() => fetchLogs(pagination.page)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+          />
         ) : logs.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
