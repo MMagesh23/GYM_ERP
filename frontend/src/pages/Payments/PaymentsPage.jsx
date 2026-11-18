@@ -331,7 +331,7 @@ const PaymentsPage = () => {
               description="No live membership currently has an outstanding balance."
             />
           ) : (
-            <table className="w-full text-left text-sm">
+            <div className="table-scroll"><table className="min-w-[900px] w-full text-left text-sm">
               <thead className="glass-thead border-b border-white/30 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10">
                 <tr>
                   <th className="px-4 py-3">Member</th>
@@ -386,7 +386,7 @@ const PaymentsPage = () => {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       )}
