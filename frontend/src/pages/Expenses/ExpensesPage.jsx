@@ -21,6 +21,7 @@ const ExpensesPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState('');
   const [analytics, setAnalytics] = useState({ byCategory: [], byMonth: [] });
 
   const [formOpen, setFormOpen] = useState(false);
@@ -48,11 +49,14 @@ const ExpensesPage = () => {
 
   const fetchAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
+    setAnalyticsError('');
     try {
       const { data } = await expenseApi.analytics(new Date().getFullYear());
       setAnalytics(data.data);
     } catch (err) {
-      // Non-critical - charts just won't render
+      const message = err.response?.data?.message || 'Could not load expense analytics';
+      setAnalyticsError(message);
+      toast.error(message);
     } finally {
       setAnalyticsLoading(false);
     }
@@ -117,6 +121,11 @@ const ExpensesPage = () => {
             <SkeletonCard className="h-[280px]" />
             <SkeletonCard className="h-[280px]" />
           </>
+        ) : analyticsError ? (
+          <div className="glass-panel flex flex-col items-start justify-center gap-3 p-4 lg:col-span-2">
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert">{analyticsError}</p>
+            <button type="button" onClick={fetchAnalytics} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry analytics</button>
+          </div>
         ) : (
           <>
             <div className="glass-panel p-4">
