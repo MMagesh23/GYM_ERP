@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Pencil, Ban, Snowflake, RefreshCw, Clock, ClipboardList } from 'lucide-react';
+import { Plus, Pencil, Ban, Snowflake, RefreshCw, Clock, ClipboardList, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { planApi } from '../../services/membershipApi';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
@@ -92,6 +92,7 @@ const PlanCard = ({ plan, onEdit, onDeactivate }) => {
 const PlansPage = () => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showInactive, setShowInactive] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
@@ -99,11 +100,14 @@ const PlansPage = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const { data } = await planApi.list(true);
       setPlans(data.data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load plans');
+      const message = err.response?.data?.message || 'Failed to load plans';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -162,6 +166,13 @@ const PlansPage = () => {
             <div key={i} className="skeleton h-64 rounded-2xl" />
           ))}
         </div>
+      ) : loadError ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="Couldn't load membership plans"
+          description={loadError}
+          action={<button type="button" onClick={load} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+        />
       ) : visiblePlans.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
