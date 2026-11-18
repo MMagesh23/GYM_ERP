@@ -1,4 +1,5 @@
 import { FileSpreadsheet, FileText } from 'lucide-react';
+import PageHeader from '../../components/common/PageHeader';
 import { reportApi } from '../../services/reportApi';
 
 const REPORTS = [
@@ -17,9 +18,8 @@ const REPORTS = [
 
 const ReportsPage = () => {
   return (
-    <div className="p-6">
-      <h1 className="mb-1 text-xl font-semibold">Reports</h1>
-      <p className="mb-6 text-sm text-gray-500">Export data for accounting, audits, or offline analysis.</p>
+    <div className="p-4 sm:p-6">
+      <PageHeader title="Reports" subtitle="Export data for accounting, audits, or offline analysis." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {REPORTS.map((r) => (
