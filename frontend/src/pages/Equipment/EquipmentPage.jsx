@@ -23,6 +23,7 @@ const EquipmentPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [alerts, setAlerts] = useState([]);
+  const [alertsError, setAlertsError] = useState('');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -52,11 +53,21 @@ const EquipmentPage = () => {
     return () => clearTimeout(timeout);
   }, [fetchItems]);
 
-  useEffect(() => {
-    equipmentApi.warrantyAlerts(30)
-      .then(({ data }) => setAlerts(data.data))
-      .catch((err) => toast.error(err.response?.data?.message || 'Could not load warranty alerts'));
+  const loadAlerts = useCallback(async () => {
+    setAlertsError('');
+    try {
+      const { data } = await equipmentApi.warrantyAlerts(30);
+      setAlerts(data.data);
+    } catch (err) {
+      const message = err.response?.data?.message || 'Could not load warranty alerts';
+      setAlertsError(message);
+      toast.error(message);
+    }
   }, []);
+
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
 
   const handleDelete = async () => {
     try {
@@ -99,7 +110,12 @@ const EquipmentPage = () => {
         }
       />
 
-      {alerts.length > 0 && (
+      {alertsError ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300" role="status">
+          <span>{alertsError}</span>
+          <button type="button" onClick={loadAlerts} className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40">Retry alerts</button>
+        </div>
+      ) : alerts.length > 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span>
