@@ -21,6 +21,7 @@ const EquipmentPage = () => {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [alerts, setAlerts] = useState([]);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -30,12 +31,15 @@ const EquipmentPage = () => {
   const fetchItems = useCallback(
     async (page = 1) => {
       setLoading(true);
+      setLoadError('');
       try {
         const { data } = await equipmentApi.list({ page, limit: 20, q: q || undefined, status: status || undefined });
         setItems(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load equipment');
+        const message = err.response?.data?.message || 'Failed to load equipment';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -132,6 +136,13 @@ const EquipmentPage = () => {
       <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
+        ) : loadError ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load equipment"
+            description={loadError}
+            action={<button type="button" onClick={() => fetchItems(pagination.page)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon={Dumbbell}
