@@ -49,7 +49,9 @@ const EquipmentPage = () => {
   }, [fetchItems]);
 
   useEffect(() => {
-    equipmentApi.warrantyAlerts(30).then(({ data }) => setAlerts(data.data));
+    equipmentApi.warrantyAlerts(30)
+      .then(({ data }) => setAlerts(data.data))
+      .catch((err) => toast.error(err.response?.data?.message || 'Could not load warranty alerts'));
   }, []);
 
   const handleDelete = async () => {
