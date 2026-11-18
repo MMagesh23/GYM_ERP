@@ -383,13 +383,25 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 .glass-table .text-gray-400,
 .glass-modal .text-gray-400,
 .glass-nav .text-gray-400 {
-  @apply text-gray-500 dark:text-gray-400;
+  color: #6b7280;
+}
+.dark .glass-panel .text-gray-400,
+.dark .glass-table .text-gray-400,
+.dark .glass-modal .text-gray-400,
+.dark .glass-nav .text-gray-400 {
+  color: #9ca3af;
 }
 .glass-panel .text-gray-500,
 .glass-table .text-gray-500,
 .glass-modal .text-gray-500,
 .glass-nav .text-gray-500 {
-  @apply text-gray-600 dark:text-gray-300;
+  color: #4b5563;
+}
+.dark .glass-panel .text-gray-500,
+.dark .glass-table .text-gray-500,
+.dark .glass-modal .text-gray-500,
+.dark .glass-nav .text-gray-500 {
+  color: #d1d5db;
 }
 
 /* Disabled state was nearly invisible on translucent surfaces. */
