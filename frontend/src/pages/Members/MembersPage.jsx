@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Search, Download, Upload, Pencil, Trash2, Ban, RotateCcw,
-  Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard, MessageCircle,
+  Users, UserCheck, UserPlus, Clock, X, Snowflake, CreditCard, MessageCircle, AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
@@ -72,6 +72,7 @@ const MembersPage = () => {
   const [status, setStatus] = useState('');
   const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(true); // initial skeleton
+  const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false); // subsequent fetches (smoother)
   const [summary, setSummary] = useState(null);
 
@@ -86,6 +87,7 @@ const MembersPage = () => {
 
   const fetchMembers = useCallback(
     async (page = 1) => {
+      setLoadError('');
       const isFirstLoad = pagination.total === 0 && !q && !status && !expiringDays && !sort;
       isFirstLoad ? setLoading(true) : setRefreshing(true);
       try {
@@ -101,7 +103,9 @@ const MembersPage = () => {
         setMembers(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load members');
+        const message = err.response?.data?.message || 'Failed to load members';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -347,6 +351,13 @@ const MembersPage = () => {
       <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
+        ) : loadError ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="Couldn't load members"
+            description={loadError}
+            action={<button type="button" onClick={() => fetchMembers(pagination.page)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+          />
         ) : members.length === 0 ? (
           <EmptyState
             icon={Users}
