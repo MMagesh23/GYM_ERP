@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, RefreshCw, Snowflake, XCircle, Pencil, Phone, Mail, MapPin, Cake,
+  ArrowLeft, RefreshCw, Snowflake, XCircle, Pencil, Phone, Mail, MapPin, Cake, AlertCircle,
   Ruler, Weight, Briefcase, HeartPulse, StickyNote, ArrowRightLeft, Repeat,
   FileText, CreditCard, CalendarClock, ShieldCheck, PlayCircle,MessageCircle ,
 } from 'lucide-react';
@@ -172,6 +172,7 @@ const MemberProfilePage = () => {
   const [history, setHistory] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [tab, setTab] = useState('overview');
 
   const [editOpen, setEditOpen] = useState(false);
@@ -194,6 +195,10 @@ const MemberProfilePage = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
+    setMember(null);
+    setHistory([]);
+    setPayments([]);
     try {
       const [memberRes, historyRes, paymentsRes] = await Promise.all([
         memberApi.get(id),
@@ -204,7 +209,9 @@ const MemberProfilePage = () => {
       setHistory(historyRes.data.data);
       setPayments(paymentsRes.data.data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load member');
+      const message = err.response?.data?.message || 'Failed to load member';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -311,12 +318,35 @@ const MemberProfilePage = () => {
     [history]
   );
 
-  if (loading || !member) {
+  if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <SkeletonBlock className="mb-4 h-8 w-40" />
         <SkeletonBlock className="mb-6 h-40 rounded-2xl" />
         <SkeletonBlock className="h-64 rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!member) {
+    return (
+      <div className="p-4 sm:p-6">
+        <EmptyState
+          icon={AlertCircle}
+          title={loadError ? "Couldn't load member" : 'Member not found'}
+          description={loadError || 'This member may have been removed or the link may be incorrect.'}
+          action={
+            loadError ? (
+              <button type="button" onClick={load} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+                Retry
+              </button>
+            ) : (
+              <Link to="/members" className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+                Back to members
+              </Link>
+            )
+          }
+        />
       </div>
     );
   }
