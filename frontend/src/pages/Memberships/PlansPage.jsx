@@ -37,11 +37,11 @@ const PlanCard = ({ plan, onEdit, onDeactivate }) => {
           </span>
           <h3 className="text-base font-semibold">{plan.name}</h3>
         </div>
-        <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button onClick={() => onEdit(plan)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+        <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          <button type="button" title="Edit plan" aria-label={`Edit ${plan.name}`} onClick={() => onEdit(plan)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
             <Pencil size={15} />
           </button>
-          <button onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
+          <button type="button" title="Deactivate plan" aria-label={`Deactivate ${plan.name}`} onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
             <Ban size={15} />
           </button>
         </div>
