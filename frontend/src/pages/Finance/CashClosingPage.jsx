@@ -12,6 +12,7 @@ import { formatCurrency, formatDate } from '../../utils/memberHelpers';
 const CashClosingPage = () => {
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewError, setPreviewError] = useState('');
   const [history, setHistory] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -24,12 +25,15 @@ const CashClosingPage = () => {
 
   const loadPreview = useCallback(async () => {
     setPreviewLoading(true);
+    setPreviewError('');
     try {
       const { data } = await cashClosingApi.preview();
       setPreview(data.data);
       if (data.data.status === 'closed') setActualCash(String(data.data.actualClosingCash));
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load cash preview');
+      const message = err.response?.data?.message || 'Failed to load cash preview';
+      setPreviewError(message);
+      toast.error(message);
     } finally {
       setPreviewLoading(false);
     }
@@ -87,8 +91,21 @@ const CashClosingPage = () => {
     <div className="p-4 sm:p-6">
       <PageHeader title="Daily Cash Closing" subtitle="Reconcile the till against what the system expects to be in the drawer." />
 
-      {previewLoading || !preview ? (
+      {previewLoading ? (
         <SkeletonCard className="mb-6 h-56" />
+      ) : previewError || !preview ? (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+          <p className="text-sm font-medium text-red-700 dark:text-red-300" role="alert">
+            {previewError || 'Cash closing preview is unavailable.'}
+          </p>
+          <button
+            type="button"
+            onClick={loadPreview}
+            className="mt-3 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Retry preview
+          </button>
+        </div>
       ) : (
         <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-card dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-4 flex items-center justify-between">
