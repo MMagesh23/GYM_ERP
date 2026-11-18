@@ -16,6 +16,7 @@ const CashClosingPage = () => {
   const [history, setHistory] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
 
   const [actualCash, setActualCash] = useState('');
   const [varianceReason, setVarianceReason] = useState('');
@@ -41,12 +42,15 @@ const CashClosingPage = () => {
 
   const loadHistory = useCallback(async (page = 1) => {
     setHistoryLoading(true);
+    setHistoryError('');
     try {
       const { data } = await cashClosingApi.list({ page, limit: 15 });
       setHistory(data.data);
       setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load closing history');
+      const message = err.response?.data?.message || 'Failed to load closing history';
+      setHistoryError(message);
+      toast.error(message);
     } finally {
       setHistoryLoading(false);
     }
@@ -224,6 +228,21 @@ const CashClosingPage = () => {
       <div className="glass-table">
         {historyLoading ? (
           <SkeletonTable rows={6} cols={7} />
+        ) : historyError ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load closing history"
+            description={historyError}
+            action={
+              <button
+                type="button"
+                onClick={() => loadHistory(pagination.page)}
+                className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                Retry
+              </button>
+            }
+          />
         ) : history.length === 0 ? (
           <EmptyState icon={Lock} title="No closings recorded yet" description="Close today's drawer to start building history." />
         ) : (
