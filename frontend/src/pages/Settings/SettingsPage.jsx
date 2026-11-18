@@ -78,7 +78,7 @@ const SettingsPage = () => {
 
   if (!settings) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         {loading ? (
           <p className="text-sm text-gray-500" role="status">Loading settings...</p>
         ) : (
@@ -103,7 +103,7 @@ const SettingsPage = () => {
   const labelClass = 'mb-1 block text-sm font-medium';
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {loadError && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300" role="status">
           Settings were saved or loaded previously, but the latest refresh failed: {loadError}
