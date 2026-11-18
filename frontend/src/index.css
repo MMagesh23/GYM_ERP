@@ -233,7 +233,7 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
   }
 
   .glass-table {
-    @apply relative overflow-hidden rounded-xl;
+    @apply relative overflow-x-auto overflow-y-hidden rounded-xl;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
@@ -242,6 +242,9 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
     /* Keeps long row lists from repainting the whole backdrop on scroll. */
     contain: paint;
   }
+
+  /* Keep dense data tables usable on phones without squeezing columns. */
+  .glass-table > table { min-width: 720px; }
 
   /* Stronger, more opaque glass for surfaces that sit above scrolling
      content and must stay legible: sidebar, header, modals, dropdowns. */
@@ -380,13 +383,25 @@ body { @apply text-gray-900 dark:text-gray-100 antialiased; }
 .glass-table .text-gray-400,
 .glass-modal .text-gray-400,
 .glass-nav .text-gray-400 {
-  @apply text-gray-500 dark:text-gray-400;
+  color: #6b7280;
+}
+.dark .glass-panel .text-gray-400,
+.dark .glass-table .text-gray-400,
+.dark .glass-modal .text-gray-400,
+.dark .glass-nav .text-gray-400 {
+  color: #9ca3af;
 }
 .glass-panel .text-gray-500,
 .glass-table .text-gray-500,
 .glass-modal .text-gray-500,
 .glass-nav .text-gray-500 {
-  @apply text-gray-600 dark:text-gray-300;
+  color: #4b5563;
+}
+.dark .glass-panel .text-gray-500,
+.dark .glass-table .text-gray-500,
+.dark .glass-modal .text-gray-500,
+.dark .glass-nav .text-gray-500 {
+  color: #d1d5db;
 }
 
 /* Disabled state was nearly invisible on translucent surfaces. */

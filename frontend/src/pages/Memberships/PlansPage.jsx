@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Pencil, Ban, Snowflake, RefreshCw, Clock, ClipboardList } from 'lucide-react';
+import { Plus, Pencil, Ban, Snowflake, RefreshCw, Clock, ClipboardList, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { planApi } from '../../services/membershipApi';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
@@ -37,11 +37,11 @@ const PlanCard = ({ plan, onEdit, onDeactivate }) => {
           </span>
           <h3 className="text-base font-semibold">{plan.name}</h3>
         </div>
-        <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button onClick={() => onEdit(plan)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+        <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          <button type="button" title="Edit plan" aria-label={`Edit ${plan.name}`} onClick={() => onEdit(plan)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
             <Pencil size={15} />
           </button>
-          <button onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
+          <button type="button" title="Deactivate plan" aria-label={`Deactivate ${plan.name}`} onClick={() => onDeactivate(plan)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
             <Ban size={15} />
           </button>
         </div>
@@ -92,6 +92,7 @@ const PlanCard = ({ plan, onEdit, onDeactivate }) => {
 const PlansPage = () => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showInactive, setShowInactive] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
@@ -99,11 +100,14 @@ const PlansPage = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const { data } = await planApi.list(true);
       setPlans(data.data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load plans');
+      const message = err.response?.data?.message || 'Failed to load plans';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -162,6 +166,13 @@ const PlansPage = () => {
             <div key={i} className="skeleton h-64 rounded-2xl" />
           ))}
         </div>
+      ) : loadError ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="Couldn't load membership plans"
+          description={loadError}
+          action={<button type="button" onClick={load} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+        />
       ) : visiblePlans.length === 0 ? (
         <EmptyState
           icon={ClipboardList}

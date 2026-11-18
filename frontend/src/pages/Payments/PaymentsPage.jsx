@@ -38,12 +38,14 @@ const PaymentsPage = () => {
   const [method, setMethod] = useState('');
   const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(true);
+  const [paymentsError, setPaymentsError] = useState('');
 
   // Every live membership that still owes money — a membership never bills
   // itself, so this is the one screen that answers "who owes what" without
   // hunting through the member list one profile at a time.
   const [dues, setDues] = useState([]);
   const [duesLoading, setDuesLoading] = useState(true);
+  const [duesError, setDuesError] = useState('');
   const [collectPaymentFor, setCollectPaymentFor] = useState(null);
 
   const [recordOpen, setRecordOpen] = useState(false);
@@ -65,11 +67,14 @@ const PaymentsPage = () => {
 
   const fetchDues = useCallback(async () => {
     setDuesLoading(true);
+    setDuesError('');
     try {
       const { data } = await membershipApi.outstanding();
       setDues(data.data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to load outstanding dues');
+      const message = err.response?.data?.message || 'Failed to load outstanding dues';
+      setDuesError(message);
+      toast.error(message);
     } finally {
       setDuesLoading(false);
     }
@@ -82,6 +87,7 @@ const PaymentsPage = () => {
   const fetchPayments = useCallback(
     async (page = 1) => {
       setLoading(true);
+      setPaymentsError('');
       try {
         const { data } = await paymentApi.list({
           page,
@@ -94,7 +100,9 @@ const PaymentsPage = () => {
         setPayments(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load payments');
+        const message = err.response?.data?.message || 'Failed to load payments';
+        setPaymentsError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -216,6 +224,13 @@ const PaymentsPage = () => {
       <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={8} cols={6} />
+        ) : paymentsError ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="Couldn't load payments"
+            description={paymentsError}
+            action={<button type="button" onClick={() => fetchPayments(pagination.page)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+          />
         ) : payments.length === 0 ? (
           <EmptyState
             icon={CreditCard}
@@ -324,6 +339,13 @@ const PaymentsPage = () => {
         <div className="glass-table">
           {duesLoading ? (
             <SkeletonTable rows={6} cols={5} />
+          ) : duesError ? (
+            <EmptyState
+              icon={AlertCircle}
+              title="Couldn't load outstanding dues"
+              description={duesError}
+              action={<button type="button" onClick={fetchDues} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+            />
           ) : dues.length === 0 ? (
             <EmptyState
               icon={ReceiptText}

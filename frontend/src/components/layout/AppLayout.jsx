@@ -82,7 +82,12 @@ const AppLayout = () => {
   const visibleItems = NAV_ITEMS.filter(
     (item) => item.roles.includes(user?.role) && (!item.feature || settings?.features?.[item.feature] !== false)
   );
-  const currentPage = visibleItems.find((i) => location.pathname.startsWith(i.to));
+  // Match complete path segments and prefer the deepest route. A raw
+  // startsWith('/members') also matched '/membership-plans', showing the
+  // wrong breadcrumb on the Plans screen.
+  const currentPage = [...visibleItems]
+    .sort((a, b) => b.to.length - a.to.length)
+    .find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`));
 
   const gymName = settings?.gymName || 'Gym ERP';
   const gymLogo = settings?.gymLogo;
@@ -153,7 +158,7 @@ const AppLayout = () => {
   );
 
   return (
-    <div className="relative flex h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="relative flex h-dvh bg-gray-50 dark:bg-gray-950">
       <div className="liquid-backdrop" />
 
       <CommandPalette userRole={user?.role} />
@@ -335,13 +340,15 @@ const AppLayout = () => {
                       <p className="truncate text-xs capitalize text-gray-400">{user?.role}</p>
                     </div>
                   </div>
-                  <button
-                    role="menuitem"
-                    onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-gray-600 transition hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5"
-                  >
-                    <SettingsIcon size={15} className="shrink-0 text-gray-400" /> Settings
-                  </button>
+                  {user?.role === 'admin' && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-gray-600 transition hover:bg-white/40 dark:text-gray-300 dark:hover:bg-white/5"
+                    >
+                      <SettingsIcon size={15} className="shrink-0 text-gray-400" /> Settings
+                    </button>
+                  )}
                   <button
                     role="menuitem"
                     onClick={handleLogout}

@@ -100,7 +100,7 @@ const DashboardPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
@@ -110,7 +110,7 @@ const DashboardPage = () => {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <EmptyState
           icon={AlertCircle}
           title="Couldn't load the dashboard"
@@ -135,7 +135,7 @@ const DashboardPage = () => {
   const planDistributionData = charts?.planDistribution || [];
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h1 className="mb-1 text-xl font-semibold">Welcome, {user?.name}</h1>
       <p className="mb-6 text-sm text-gray-500">Role: <span className="font-medium capitalize">{user?.role}</span></p>
 

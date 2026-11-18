@@ -16,6 +16,7 @@ const StaffPage = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
@@ -27,12 +28,15 @@ const StaffPage = () => {
   const fetchStaff = useCallback(
     async (page = 1) => {
       setLoading(true);
+      setLoadError('');
       try {
         const { data } = await staffApi.list({ page, limit: 20, q: q || undefined });
         setStaff(data.data);
         setPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total });
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load staff');
+        const message = err.response?.data?.message || 'Failed to load staff';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -115,6 +119,13 @@ const StaffPage = () => {
       <div className="glass-table">
         {loading ? (
           <SkeletonTable rows={6} cols={5} />
+        ) : loadError ? (
+          <EmptyState
+            icon={UserCog}
+            title="Couldn't load staff"
+            description={loadError}
+            action={<button type="button" onClick={() => fetchStaff(pagination.page)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">Retry</button>}
+          />
         ) : staff.length === 0 ? (
           <EmptyState
             icon={UserCog}
